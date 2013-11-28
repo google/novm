@@ -1,0 +1,4 @@
+# Basic package information.
+MAINTAINER ?= Adin Scannell <adin@scannell.ca>
+SUMMARY ?= A high-performance, next-generation hypervisor written in Go.
+URL ?= http://github.com/amscanne/pervirt

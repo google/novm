@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+
+"""
+novm management script.
+"""
+
+import os
+import sys
+
+if os.path.exists(os.path.join("novm", "__init__.py")):
+    sys.path.insert(0, ".")
+
+import novm.cli
+
+if __name__ == "__main__":
+    novm.cli.main(sys.argv[1:])

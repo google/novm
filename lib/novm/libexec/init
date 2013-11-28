@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Parse our command line arguments.
+# Critically this will include information
+# about attached devices, IP addresses, etc.
+for x in $(cat /proc/cmdline); do
+    case $x in
+    init=*)
+        init=${x#init=}
+        ;;
+    esac
+done
+
+# Execute our noinit process.
+#
+# The first thing this will do is
+# call pivot_root given the argument.
+#
+# The second thing it will do is open
+# the virtIO console and become an RPC
+# server for the backend. Yeehaw!
+exec /noguest -pivot_root /root

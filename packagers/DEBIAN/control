@@ -1,0 +1,8 @@
+Package: novm
+Section: extra
+Version: VERSION
+Architecture: ARCHITECTURE
+Maintainer: MAINTAINER
+Description: SUMMARY
+Homepage: URL
+Depends: dnsmasq, bridge-utils
