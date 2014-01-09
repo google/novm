@@ -1,8 +1,13 @@
 novm
 ====
 
-*novm* is a legacy-free, L2 hypervisor written in Go. Its goal is to provide an
-alternate, high-performance Linux hypervisor for cloud workloads.
+*novm* is a legacy-free, type 2 hypervisor written in Go. Its goal is to
+provide an alternate, high-performance Linux hypervisor for cloud workloads.
+
+*novm* is powerful because it exposes a filesystem-device as a primary
+mechanism for running guests. This allows you to easily manage independent
+software and data bundles independently and combine them into a single virtual
+machine instance.
 
 *novm* leverages the excellent Linux Kernel Virtual Machine (KVM) interface to
 run guest instances.
@@ -49,18 +54,18 @@ simple script derived from the script found in the Linux tree.
 Given a vmlinux binary file, we load the file directly into memory as specified
 by the ELF program headers. For example:
 
-  Type           Offset             VirtAddr           PhysAddr
-                 FileSiz            MemSiz              Flags  Align
-  LOAD           0x0000000000200000 0xffffffff81000000 0x0000000001000000
-                 0x0000000000585000 0x0000000000585000  R E    200000
-  LOAD           0x0000000000800000 0xffffffff81600000 0x0000000001600000
-                 0x000000000009d0f0 0x000000000009d0f0  RW     200000
-  LOAD           0x0000000000a00000 0x0000000000000000 0x000000000169e000
-                 0x0000000000014bc0 0x0000000000014bc0  RW     200000
-  LOAD           0x0000000000ab3000 0xffffffff816b3000 0x00000000016b3000
-                 0x00000000000d5000 0x00000000005dd000  RWE    200000
-  NOTE           0x000000000058efd0 0xffffffff8138efd0 0x000000000138efd0
-                 0x000000000000017c 0x000000000000017c         4
+    Type           Offset             VirtAddr           PhysAddr
+                   FileSiz            MemSiz              Flags  Align
+    LOAD           0x0000000000200000 0xffffffff81000000 0x0000000001000000
+                   0x0000000000585000 0x0000000000585000  R E    200000
+    LOAD           0x0000000000800000 0xffffffff81600000 0x0000000001600000
+                   0x000000000009d0f0 0x000000000009d0f0  RW     200000
+    LOAD           0x0000000000a00000 0x0000000000000000 0x000000000169e000
+                   0x0000000000014bc0 0x0000000000014bc0  RW     200000
+    LOAD           0x0000000000ab3000 0xffffffff816b3000 0x00000000016b3000
+                   0x00000000000d5000 0x00000000005dd000  RWE    200000
+    NOTE           0x000000000058efd0 0xffffffff8138efd0 0x000000000138efd0
+                   0x000000000000017c 0x000000000000017c         4
 
 We also note the entry point for the binary (here it happens to be 0x1000000).
 
