@@ -12,6 +12,22 @@ machine instance.
 *novm* leverages the excellent Linux Kernel Virtual Machine (KVM) interface to
 run guest instances.
 
+Why *novm*?
+-----------
+
+*novm* changes the rules of virtualization by principally exposing a flexible
+filesystem interface instead of virtual block devices. This eliminates the pain
+of managing virtual disk images and allows much greater flexibility to how
+software is bundled and deployed. A virtual machine is no longer a heavyweight
+instance, but rather a hardware-enforced container around a collection of files
+and services defined on-the-fly.
+
+*novm* also focuses only on high-performance paravirtualized devices, and drops
+support for legacy hardware and most emulation. This makes it inappropriate
+for running legacy applications, but ideal for modern cloud-based virtualization
+use cases. *novm* was originally called *pervirt*, but this name was changed
+after it was suggested that this name *could* be misconstrued.
+
 Technical Details
 -----------------
 
