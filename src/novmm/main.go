@@ -83,24 +83,34 @@ func main() {
     // None of these will actually come online
     // until the primary VCPU below delivers the
     // appropriate IPI to start them up.
-    done := make(chan error)
+    vcpu_err := make(chan error)
     for _, vcpu := range vcpus {
-        go func() {
+        go func(vcpu *platform.Vcpu) {
             defer vcpu.Dispose()
             err := Loop(vcpu, model, *step, tracer)
             if err != nil {
                 vcpu.Dump()
             }
-            done <- err
-        }()
-    }
-    for _, _ = range vcpus {
-        this_err := <-done
-        if err == nil {
-            err = this_err
-        }
+            vcpu_err <- err
+        }(vcpu)
     }
 
-    // Everything died?
-    log.Fatal(err)
+    // Wait until we get a signal,
+    // or all the VCPUs are dead.
+    vcpus_alive := len(vcpus)
+
+    for {
+        select {
+        case err := <-vcpu_err:
+            vcpus_alive -= 1
+            if err != nil {
+                log.Printf("Vcpu died: %s", err.Error())
+            }
+        }
+
+        // Everything died?
+        if vcpus_alive == 0 {
+            log.Fatal(NoVcpus)
+        }
+    }
 }
