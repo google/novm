@@ -56,6 +56,8 @@ def tap_device(name):
 
 class Nic(virtio.Device):
 
+    virtio_driver = "net"
+
     def __init__(
             self,
             index=0,
@@ -121,14 +123,11 @@ class Nic(virtio.Device):
                 preexec_fn=utils.cleanup,
                 close_fds=True)
 
-    def device(self):
-        return super(Nic, self)._device(
-            driver="net",
-            data={
-                "mac": self._info["mac"],
-                "fd": self._tap.fileno(),
-            },
-        )
+    def data(self):
+        return {
+            "mac": self._info["mac"],
+            "fd": self._tap.fileno(),
+        }
 
     def info(self):
         return self._info

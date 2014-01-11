@@ -15,12 +15,9 @@ class Device(device.Device):
         # PCI?
         self._pci = pci
 
-    def info(self):
-        raise NotImplementedError()
-
-    def _device(self, driver, data=None):
-        return super(Device, self)._device(
-            driver="virtio-%s-%s" % (
-                self._pci and "pci" or "mmio", driver),
-            data=data
-        )
+    @property
+    def driver(self):
+        if self._pci:
+            return "virtio-pci-%s" % self.virtio_driver
+        else:
+            return "virtio-mmio-%s" % self.virtio_driver

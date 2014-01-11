@@ -1,8 +1,8 @@
 package machine
 
 import (
+    "math"
     "os"
-    "sync"
 )
 
 const (
@@ -77,22 +77,17 @@ type UartIntr struct {
 }
 
 func (uart *UartData) Read(offset uint64, size uint) (uint64, error) {
-    if uart.uart.lcr.value&UartLcrDLAB != 0 {
-        return uart.uart.dll.Read(offset, size)
+    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.uart.Dll.Read(offset, size)
     }
 
-    uart.uart.Mutex.Lock()
-    uart.uart.in_buffer -= 1
-    if uart.uart.in_buffer == 0 {
-        uart.uart.lsr.value = uart.uart.lsr.value & ^uint64(UartLsrRXRDY)
-    }
-    uart.uart.Mutex.Unlock()
-    return uint64(<-uart.uart.buffer), nil
+    // No data available.
+    return math.MaxUint64, nil
 }
 
 func (uart *UartData) Write(offset uint64, size uint, value uint64) error {
-    if uart.uart.lcr.value&UartLcrDLAB != 0 {
-        return uart.uart.dll.Write(offset, size, value)
+    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.uart.Dll.Write(offset, size, value)
     }
 
     // Ignore return value.
@@ -101,151 +96,85 @@ func (uart *UartData) Write(offset uint64, size uint, value uint64) error {
 }
 
 func (uart *UartIntr) Read(offset uint64, size uint) (uint64, error) {
-    if uart.uart.lcr.value&UartLcrDLAB != 0 {
-        return uart.uart.dlh.Read(offset, size)
+    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.uart.Dlh.Read(offset, size)
     }
 
-    return uart.uart.ier.Read(offset, size)
+    return uart.uart.Ier.Read(offset, size)
 }
 
 func (uart *UartIntr) Write(offset uint64, size uint, value uint64) error {
-    if uart.uart.lcr.value&UartLcrDLAB != 0 {
-        return uart.uart.dlh.Write(offset, size, value)
+    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.uart.Dlh.Write(offset, size, value)
     }
 
-    return uart.uart.ier.Write(offset, size, value)
+    return uart.uart.Ier.Write(offset, size, value)
 }
 
 type Uart struct {
-    ier Register
-    iir Register
-    lcr Register
-    mcr Register
-    lsr Register
-    msr Register
-    fcr Register
-    scr Register
+    PioDevice
 
-    dll Register
-    dlh Register
+    // Registers.
+    Ier Register `json:"ier"`
+    Iir Register `json:"iir"`
+    Lcr Register `json:"lcr"`
+    Mcr Register `json:"mcr"`
+    Lsr Register `json:"lsr"`
+    Msr Register `json:"msr"`
+    Fcr Register `json:"fcr"`
+    Scr Register `json:"scr"`
+    Dll Register `json:"dll"`
+    Dlh Register `json:"dlh"`
 
-    // Our Fifo.
-    buffer    chan byte
-    in_buffer int32
-    sync.Mutex
-
-    // Pending?
-    thre_pending bool
-
-    Interrupt int    `json:"interrupt"`
-    IoBase    uint64 `json:"address"`
+    // Our allocated interrupt.
+    Interrupt int `json:"interrupt"`
 }
 
-func (uart *Uart) readStream(input *os.File) error {
-
-    buffer := make([]byte, 1, 1)
-
-    for {
-        n, err := input.Read(buffer)
-        if n > 0 {
-            uart.Mutex.Lock()
-            uart.in_buffer += 1
-            uart.lsr.value = uart.lsr.value | UartLsrRXRDY
-            uart.Mutex.Unlock()
-            uart.buffer <- buffer[0]
-        }
-        if err != nil {
-            return err
-        }
-    }
-
-    return nil
-}
-
-func NewUart(info *DeviceInfo) (*Uart, *Device, error) {
+func NewUart(info *DeviceInfo) (Device, error) {
 
     // Create the uart.
     uart := new(Uart)
-    uart.buffer = make(chan byte, 1024)
-    info.Load(uart)
 
-    // Is this a sane uart?
-    if uart.IoBase == 0 || uart.Interrupt == 0 {
-        return nil, nil, UartUnknown
-    }
-
-    // Start reading stdin.
-    go uart.readStream(os.Stdin)
-
-    // Create the device.
-    device, err := NewDevice(
-        info,
-        IoMap{
-            // Our configuration ports.
-            MemoryRegion{0, 1}: &UartData{uart},
-            MemoryRegion{1, 1}: &UartIntr{uart},
-            MemoryRegion{2, 1}: &uart.iir, // Interrupt identification.
-            MemoryRegion{3, 1}: &uart.lcr, // Line control register.
-            MemoryRegion{4, 1}: &uart.mcr, // Modem control register.
-            MemoryRegion{5, 1}: &uart.lsr, // Line status register.
-            MemoryRegion{6, 1}: &uart.msr, // Modem status register.
-            MemoryRegion{7, 1}: &uart.scr, // Scratch register.
-
-            MemoryRegion{8, 2}:  &uart.dll, // Divisor low-register.
-            MemoryRegion{10, 2}: &uart.dlh, // Divisor high-register.
-        },
-        uart.IoBase, // Port-I/O offset.
-        IoMap{},
-        0,  // Memory-I/O offset.
-    )
-    if err != nil {
-        return nil, nil, err
+    // Create our IOmap.
+    uart.PioDevice.IoMap = IoMap{
+        // Our configuration ports.
+        MemoryRegion{0, 1}: &UartData{uart},
+        MemoryRegion{1, 1}: &UartIntr{uart},
+        MemoryRegion{2, 1}: &uart.Iir, // Interrupt identification.
+        MemoryRegion{3, 1}: &uart.Lcr, // Line control register.
+        MemoryRegion{4, 1}: &uart.Mcr, // Modem control register.
+        MemoryRegion{5, 1}: &uart.Lsr, // Line status register.
+        MemoryRegion{6, 1}: &uart.Msr, // Modem status register.
+        MemoryRegion{7, 1}: &uart.Scr, // Scratch register.
     }
 
     // Set our readonly bits.
-    uart.lsr.readonly = 0xff
-    uart.msr.readonly = 0xff
-    uart.msr.readclr = 0x0f
-    uart.mcr.readonly = 0x1f
+    uart.Lsr.readonly = 0xff
+    uart.Msr.readonly = 0xff
+    uart.Msr.readclr = 0x0f
+    uart.Mcr.readonly = 0x1f
 
     // We're always ready for data.
-    uart.lsr.value = UartLsrTEMT | UartLsrTHRE
-    uart.lsr.readonly = uart.lsr.value
+    uart.Lsr.Value = UartLsrTEMT | UartLsrRXRDY | UartLsrTHRE
+    uart.Lsr.readonly = uart.Lsr.Value
 
     // Clear the OE bit on read.
-    uart.lsr.readclr = UartLsrOE
+    uart.Lsr.readclr = UartLsrOE
 
     // Set our divisor.
     divisor := uint64(UartDefaultRclk / UartDefaultBaud / 16)
-    uart.dll.value = divisor
-    uart.dlh.value = divisor >> 16
+    uart.Dll.Value = divisor
+    uart.Dlh.Value = divisor >> 16
 
-    return uart, device, nil
+    return uart, uart.Init(info)
 }
 
 func (uart *Uart) getInterruptStatus() uint8 {
-    uart.Mutex.Lock()
-    defer uart.Mutex.Unlock()
-
-    if uart.lsr.value&UartLsrOE != 0 && uart.ier.value&UartIerERLS != 0 {
+    if uart.Lsr.Value&UartLsrOE != 0 && uart.Ier.Value&UartIerERLS != 0 {
         return UartIirRLS
-    } else if uart.in_buffer > 0 && uart.ier.value&UartIerERXRDY != 0 {
-        return UartIirRXTOUT
-    } else if uart.thre_pending && uart.ier.value&UartIerETXRDY != 0 {
-        return UartIirTXRDY
-    } else if uart.msr.value&UartMsrMASK != 0 && uart.ier.value&UartIerEMSC != 0 {
+    } else if uart.Msr.Value&UartMsrMASK != 0 && uart.Ier.Value&UartIerEMSC != 0 {
         return UartIirMLSC
     }
 
     return UartIirNOPEND
-}
-
-func LoadUart(model *Model, info *DeviceInfo) error {
-
-    _, device, err := NewUart(info)
-    if err != nil {
-        return err
-    }
-
-    return model.AddDevice(device)
 }

@@ -1,49 +1,57 @@
 package machine
 
+import (
+    "novmm/platform"
+)
+
 type IoMap map[MemoryRegion]IoOperations
 type IoHandlers map[MemoryRegion]*IoHandler
 
-type Device struct {
-    // Generic info.
+type BaseDevice struct {
+    // Pointer to original device info.
     info *DeviceInfo
-
-    // Port I/O handlers.
-    Pio IoHandlers
-
-    // Mmio I/O handlers.
-    Mmio IoHandlers
 }
 
-func NewDevice(
-    info *DeviceInfo,
-    pio IoMap,
-    pio_offset uint64,
-    mmio IoMap,
-    mmio_offset uint64) (*Device, error) {
+type Device interface {
+    Name() string
 
-    // Create our device.
-    device := new(Device)
+    PioHandlers() IoHandlers
+    MmioHandlers() IoHandlers
+
+    Attach(vm *platform.Vm, model *Model) error
+
+    IsDebugging() bool
+}
+
+func (device *BaseDevice) Init(info *DeviceInfo) error {
+    // Save our original device info.
+    // This is for convenience in implementing Name()
+    // IsDebugging() only and isn't structural.
     device.info = info
-
-    // Initialize all handlers.
-    device.Pio = make(IoHandlers)
-    device.Mmio = make(IoHandlers)
-    for region, ops := range pio {
-        new_region := MemoryRegion{region.Start.After(pio_offset), region.Size}
-        device.Pio[new_region] = NewIoHandler(device.info, new_region, ops)
-    }
-    for region, ops := range mmio {
-        // Set our region.
-        new_region := MemoryRegion{region.Start.After(mmio_offset), region.Size}
-        device.Mmio[new_region] = NewIoHandler(device.info, new_region, ops)
-    }
-
-    // We're good.
-    return device, nil
+    return nil
 }
 
-func (model *Model) AddDevice(device *Device) error {
+func (device *BaseDevice) Name() string {
+    return device.info.Name
+}
 
-    model.devices = append(model.devices, device)
-    return model.flush()
+func (device *BaseDevice) PioHandlers() IoHandlers {
+    if device.Name() == "uart" {
+        var d *BaseDevice
+        d.info = nil
+    }
+
+    return IoHandlers{}
+}
+
+func (device *BaseDevice) MmioHandlers() IoHandlers {
+    return IoHandlers{}
+}
+
+func (device *BaseDevice) IsDebugging() bool {
+    return device.info.Debug
+}
+
+func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {
+    return nil
 }

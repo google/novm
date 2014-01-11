@@ -107,7 +107,17 @@ const (
 // Generic error for unknown registers.
 var UnknownRegister = errors.New("Unknown Register")
 
-func (vcpu *KvmVcpu) Run(step bool) error {
+func (vm *Vm) LApic() Paddr {
+    // This is the default.
+    return Paddr(0xfee00000)
+}
+
+func (vm *Vm) IOApic() Paddr {
+    // This is the default.
+    return Paddr(0xfec00000)
+}
+
+func (vcpu *Vcpu) Run(step bool) error {
     // Make sure our registers are flushed.
     err := vcpu.flushRegs()
     if err != nil {
@@ -147,7 +157,7 @@ func (vcpu *KvmVcpu) Run(step bool) error {
     return vcpu.GetExitError()
 }
 
-func (vcpu *KvmVcpu) refreshRegs(dirty bool) error {
+func (vcpu *Vcpu) refreshRegs(dirty bool) error {
     // Ensure that our registers are up-to-date.
     // NOTE: We don't use the sync registers capability
     // which will expose the registers via the shared page.
@@ -172,7 +182,7 @@ func (vcpu *KvmVcpu) refreshRegs(dirty bool) error {
     return nil
 }
 
-func (vcpu *KvmVcpu) flushRegs() error {
+func (vcpu *Vcpu) flushRegs() error {
     // Ensure that our registers are up-to-date.
     if vcpu.regs_dirty {
         _, _, e := syscall.Syscall(
@@ -190,7 +200,7 @@ func (vcpu *KvmVcpu) flushRegs() error {
     return nil
 }
 
-func (vcpu *KvmVcpu) refreshSRegs(dirty bool) error {
+func (vcpu *Vcpu) refreshSRegs(dirty bool) error {
     // Ensure that our registers are up-to-date.
     if !vcpu.sregs_cached {
         _, _, e := syscall.Syscall(
@@ -210,7 +220,7 @@ func (vcpu *KvmVcpu) refreshSRegs(dirty bool) error {
     return nil
 }
 
-func (vcpu *KvmVcpu) flushSRegs() error {
+func (vcpu *Vcpu) flushSRegs() error {
     // Ensure that our registers are up-to-date.
     if vcpu.sregs_dirty {
         _, _, e := syscall.Syscall(
@@ -228,7 +238,7 @@ func (vcpu *KvmVcpu) flushSRegs() error {
     return nil
 }
 
-func (vcpu *KvmVcpu) SetRegister(reg Register, val RegisterValue) error {
+func (vcpu *Vcpu) SetRegister(reg Register, val RegisterValue) error {
     err := vcpu.refreshRegs(true)
     if err != nil {
         return err
@@ -278,7 +288,7 @@ func (vcpu *KvmVcpu) SetRegister(reg Register, val RegisterValue) error {
     return nil
 }
 
-func (vcpu *KvmVcpu) GetRegister(reg Register) (RegisterValue, error) {
+func (vcpu *Vcpu) GetRegister(reg Register) (RegisterValue, error) {
     err := vcpu.refreshRegs(false)
     if err != nil {
         return RegisterValue(0), err
@@ -326,7 +336,7 @@ func (vcpu *KvmVcpu) GetRegister(reg Register) (RegisterValue, error) {
     return RegisterValue(0), UnknownRegister
 }
 
-func (vcpu *KvmVcpu) dumpRegister(name string, reg Register) {
+func (vcpu *Vcpu) dumpRegister(name string, reg Register) {
     value, err := vcpu.GetRegister(reg)
 
     if err != nil {
@@ -336,7 +346,7 @@ func (vcpu *KvmVcpu) dumpRegister(name string, reg Register) {
     }
 }
 
-func (vcpu *KvmVcpu) dumpRegisters() {
+func (vcpu *Vcpu) dumpRegisters() {
     vcpu.dumpRegister("RAX", RAX)
     vcpu.dumpRegister("RBX", RBX)
     vcpu.dumpRegister("RCX", RCX)
@@ -357,7 +367,7 @@ func (vcpu *KvmVcpu) dumpRegisters() {
     vcpu.dumpRegister("RFLAGS", RFLAGS)
 }
 
-func (vcpu *KvmVcpu) SetControlRegister(
+func (vcpu *Vcpu) SetControlRegister(
     reg ControlRegister,
     val ControlRegisterValue,
     sync bool) error {
@@ -396,7 +406,7 @@ func (vcpu *KvmVcpu) SetControlRegister(
     return nil
 }
 
-func (vcpu *KvmVcpu) GetControlRegister(reg ControlRegister) (ControlRegisterValue, error) {
+func (vcpu *Vcpu) GetControlRegister(reg ControlRegister) (ControlRegisterValue, error) {
     err := vcpu.refreshSRegs(false)
     if err != nil {
         return ControlRegisterValue(0), err
@@ -422,7 +432,7 @@ func (vcpu *KvmVcpu) GetControlRegister(reg ControlRegister) (ControlRegisterVal
     return ControlRegisterValue(0), UnknownRegister
 }
 
-func (vcpu *KvmVcpu) dumpControlRegister(name string, reg ControlRegister) {
+func (vcpu *Vcpu) dumpControlRegister(name string, reg ControlRegister) {
     value, err := vcpu.GetControlRegister(reg)
 
     if err != nil {
@@ -432,7 +442,7 @@ func (vcpu *KvmVcpu) dumpControlRegister(name string, reg ControlRegister) {
     }
 }
 
-func (vcpu *KvmVcpu) dumpControlRegisters() {
+func (vcpu *Vcpu) dumpControlRegisters() {
     vcpu.dumpControlRegister("CR0", CR0)
     vcpu.dumpControlRegister("CR2", CR2)
     vcpu.dumpControlRegister("CR3", CR3)
@@ -442,7 +452,7 @@ func (vcpu *KvmVcpu) dumpControlRegisters() {
     vcpu.dumpControlRegister("APIC_BASE", APIC_BASE)
 }
 
-func (vcpu *KvmVcpu) SetSegment(
+func (vcpu *Vcpu) SetSegment(
     seg Segment,
     val SegmentValue,
     sync bool) error {
@@ -563,7 +573,7 @@ func (vcpu *KvmVcpu) SetSegment(
     return nil
 }
 
-func (vcpu *KvmVcpu) GetSegment(seg Segment) (SegmentValue, error) {
+func (vcpu *Vcpu) GetSegment(seg Segment) (SegmentValue, error) {
     err := vcpu.refreshSRegs(false)
     if err != nil {
         return SegmentValue{}, err
@@ -687,7 +697,7 @@ func (vcpu *KvmVcpu) GetSegment(seg Segment) (SegmentValue, error) {
     return SegmentValue{}, UnknownRegister
 }
 
-func (vcpu *KvmVcpu) dumpSegment(name string, seg Segment) {
+func (vcpu *Vcpu) dumpSegment(name string, seg Segment) {
     log.Printf("  segment %s:", name)
     value, err := vcpu.GetSegment(seg)
 
@@ -709,7 +719,7 @@ func (vcpu *KvmVcpu) dumpSegment(name string, seg Segment) {
     log.Print("    avl: ", value.Avl)
 }
 
-func (vcpu *KvmVcpu) dumpSegments() {
+func (vcpu *Vcpu) dumpSegments() {
     vcpu.dumpSegment("CS", CS)
     vcpu.dumpSegment("DS", DS)
     vcpu.dumpSegment("ES", ES)
@@ -720,7 +730,7 @@ func (vcpu *KvmVcpu) dumpSegments() {
     vcpu.dumpSegment("LDT", LDT)
 }
 
-func (vcpu *KvmVcpu) SetDescriptor(
+func (vcpu *Vcpu) SetDescriptor(
     desc Descriptor,
     val DescriptorValue,
     sync bool) error {
@@ -751,7 +761,7 @@ func (vcpu *KvmVcpu) SetDescriptor(
     return nil
 }
 
-func (vcpu *KvmVcpu) GetDescriptor(desc Descriptor) (DescriptorValue, error) {
+func (vcpu *Vcpu) GetDescriptor(desc Descriptor) (DescriptorValue, error) {
     err := vcpu.refreshSRegs(false)
     if err != nil {
         return DescriptorValue{}, err
@@ -773,7 +783,7 @@ func (vcpu *KvmVcpu) GetDescriptor(desc Descriptor) (DescriptorValue, error) {
     return DescriptorValue{}, UnknownRegister
 }
 
-func (vcpu *KvmVcpu) dumpDescriptor(name string, desc Descriptor) {
+func (vcpu *Vcpu) dumpDescriptor(name string, desc Descriptor) {
     log.Printf("  descriptor %s:", name)
     value, err := vcpu.GetDescriptor(desc)
 
@@ -786,12 +796,12 @@ func (vcpu *KvmVcpu) dumpDescriptor(name string, desc Descriptor) {
     log.Printf("    limit: 0x%08x", value.Limit)
 }
 
-func (vcpu *KvmVcpu) dumpDescriptors() {
+func (vcpu *Vcpu) dumpDescriptors() {
     vcpu.dumpDescriptor("GDT", GDT)
     vcpu.dumpDescriptor("IDT", IDT)
 }
 
-func (vcpu *KvmVcpu) Dump() {
+func (vcpu *Vcpu) Dump() {
     log.Printf("Vcpu (id: %d):", vcpu.vcpu_id)
 
     vcpu.dumpRegisters()
@@ -800,12 +810,16 @@ func (vcpu *KvmVcpu) Dump() {
     vcpu.dumpDescriptors()
 }
 
-func (vm *KvmVm) MapSpecialMemory(addr Paddr) (uint64, error) {
+func (vm *Vm) SizeSpecialMemory() uint64 {
+    return 4 * PageSize
+}
+
+func (vm *Vm) MapSpecialMemory(addr Paddr) error {
 
     // We require 1 page for the identity map.
     err := vm.MapReservedMemory(addr, PageSize)
     if err != nil {
-        return 0, err
+        return err
     }
 
     // Set the EPT identity map.
@@ -817,13 +831,13 @@ func (vm *KvmVm) MapSpecialMemory(addr Paddr) (uint64, error) {
         uintptr(unsafe.Pointer(&addr)))
     if e != 0 {
         log.Printf("Unable to set identity map to 0x%08x!", addr)
-        return 0, e
+        return e
     }
 
     // We require 3 pages for the TSS address.
     err = vm.MapReservedMemory(addr+PageSize, 3*PageSize)
     if err != nil {
-        return 0, err
+        return err
     }
 
     // Set the TSS address to above.
@@ -835,16 +849,9 @@ func (vm *KvmVm) MapSpecialMemory(addr Paddr) (uint64, error) {
         uintptr(addr+PageSize))
     if e != 0 {
         log.Printf("Unable to set TSS ADDR to 0x%08x!", addr+PageSize)
-        return 0, e
+        return e
     }
 
     // We're okay.
-    return 4 * PageSize, nil
-}
-
-func (vm *KvmVm) UnmapSpecialMemory(
-    start Paddr) error {
-
-    // Ignore.
     return nil
 }

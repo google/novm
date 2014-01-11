@@ -15,9 +15,12 @@ from . import cli
 from . import net
 from . import block
 from . import serial
+from . import basic
+from . import memory
 from . import fs
 from . import clock
 from . import pci
+from . import cpu
 
 class NovmManager(object):
 
@@ -47,7 +50,7 @@ class NovmManager(object):
     def run(self,
             name=cli.StrOpt("The instance name."),
             vcpus=cli.IntOpt("The number of vcpus."),
-            memory=cli.IntOpt("The member size (in mb)."),
+            memsize=cli.IntOpt("The member size (in mb)."),
             kernel=cli.StrOpt("The kernel to use."),
             nic=cli.ListOpt("Define a network device."),
             disk=cli.ListOpt("Define a block device."),
@@ -103,9 +106,7 @@ class NovmManager(object):
         The console flag is a simple boolean.
         """
         if vcpus is None:
-            raise Exception("Must provide vcpus (--vcpus).")
-        if memory is None:
-            raise Exception("Must provide memory (--memory).")
+            vcpus = 1
 
         args = ["novmm"]
         devices = []
@@ -120,9 +121,10 @@ class NovmManager(object):
         if kernel not in self._kernels.list():
             raise Exception("Kernel not found!")
 
-        # Basic arguments.
-        args.extend(["-vcpus", str(vcpus)])
-        args.extend(["-memory", str(memory)])
+        # Always add basic devices.
+        devices.append(basic.Tss())
+        devices.append(basic.Bios())
+        devices.append(basic.Acpi())
 
         # Add the kernel arguments.
         args.extend(["-vmlinux", self._kernels.file(kernel, "vmlinux")])
@@ -168,11 +170,14 @@ class NovmManager(object):
         # the guest will use this as an RPC mechanism.
         devices.append(serial.Console(pci=usepci))
 
+        # Enable user-memory.
+        devices.append(memory.UserMemory(
+            size=1024*1024*(memsize or 64)))
+
         # Save metadata.
         info = {
-            "vcpus": vcpus,
-            "memory": memory,
             "name": name,
+            "vcpus": vcpus,
             "kernel": kernel,
             "devices": [
                 (dev.__class__.__name__, dev.info())
@@ -180,6 +185,12 @@ class NovmManager(object):
             ],
         }
         self._instances.add(str(os.getpid()), info)
+
+        # Provide our CPU data.
+        args.append("-vcpus=%s" %
+            json.dumps([
+                cpu.Cpu().arg() for _ in range(vcpus)
+        ]))
 
         # Construct our cmdline.
         args.append("-cmdline=%s" % " ".join([
@@ -190,14 +201,15 @@ class NovmManager(object):
 
         # Execute the instance.
         args.append("-devices=%s" % json.dumps([
-            dev.device() for dev in devices
+            dev.arg() for dev in devices
         ]))
         args.extend(["-%s" % x for x in vmmopt])
 
         sys.stderr.write("exec: %s\n" % " ".join(args))
         os.execv(utils.libexec("novmm"), args)
 
-    def list(self):
+    def list(self,
+            devices=cli.BoolOpt("Include device info?")):
         """ List running instances. """
         legit_instances = []
         for instance in self._instances.list():
@@ -207,7 +219,10 @@ class NovmManager(object):
                 self._instances.remove(instance)
                 continue
             legit_instances.append(instance)
-        return self._instances.show()
+        rval = self._instances.show()
+        if not devices and "devices" in rval:
+            del rval["devices"]
+        return rval
 
     def packs(self):
         """ List available packs. """

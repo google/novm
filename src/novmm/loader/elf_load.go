@@ -26,19 +26,18 @@ func doLoad(
     // Bump up the size to the end of the page.
     new_length := platform.Align(uint64(length), platform.PageSize, true)
 
-    // Map the requested section.
-    err := model.Set(
-        machine.User,
-        "elf kernel",
-        platform.Paddr(offset), // Start.
-        new_length,             // Size.
-        source)
-
+    // Allocate the backing data.
+    data, err := model.Map(
+        platform.Paddr(offset),
+        new_length)
     if err != nil {
         // Things are broken.
         log.Print("Error during ElfLoad: ", err)
         return -C.int(syscall.EINVAL)
     }
+
+    // Copy the data in.
+    C.memcpy(unsafe.Pointer(&data[0]), source, length)
 
     // All good.
     return 0

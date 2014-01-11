@@ -4,16 +4,15 @@ import (
     "log"
     "novmm/platform"
     "sort"
-    "unsafe"
 )
 
 type MemoryType int
 
 const (
-    Reserved MemoryType = iota
-    User                = 1
-    Acpi                = 2
-    Special             = 3
+    MemoryTypeReserved MemoryType = iota
+    MemoryTypeUser                = 1
+    MemoryTypeAcpi                = 2
+    MemoryTypeSpecial             = 3
 )
 
 type MemoryRegion struct {
@@ -23,18 +22,18 @@ type MemoryRegion struct {
 
 type TypedMemoryRegion struct {
     MemoryRegion
-    Type MemoryType
+    MemoryType
 
-    // The mmap for user memory.
-    // NOTE: If the user passed in a user pointer,
-    // we will store it directly here and use it.
-    // If they pass in a mmap, we will ensure that
-    // the user pointer is also converted properly.
-    mmap []byte
-    user unsafe.Pointer
+    // The owner.
+    Device
 
-    // Whether the above was allocated?
-    allocated bool
+    // The memory pointer (slice).
+    user []byte
+
+    // Allocated chunks.
+    // These are offsets, which point
+    // to the amount of memory allocated.
+    allocated map[uint64]uint64
 }
 
 func (region *MemoryRegion) End() platform.Paddr {
@@ -50,185 +49,101 @@ func (region *MemoryRegion) Contains(start platform.Paddr, size uint64) bool {
     return region.Start <= start && region.End() >= start.After(size)
 }
 
-type MemoryMap struct {
-    // The list of memory regions.
-    regions []*TypedMemoryRegion
-
-    // The VM in which they are created.
-    vm  platform.Vm
-}
+type MemoryMap []*TypedMemoryRegion
 
 func (memory *MemoryMap) Len() int {
-    return len(memory.regions)
+    return len(*memory)
 }
 
 func (memory *MemoryMap) Swap(i int, j int) {
-    memory.regions[i], memory.regions[j] = memory.regions[j], memory.regions[i]
+    (*memory)[i], (*memory)[j] = (*memory)[j], (*memory)[i]
 }
 
 func (memory *MemoryMap) Less(i int, j int) bool {
-    return memory.regions[i].Start < memory.regions[j].Start
+    return (*memory)[i].Start < (*memory)[j].Start
 }
 
-func (memory *MemoryMap) HasConflict(start platform.Paddr, size uint64) bool {
-    for _, orig_region := range memory.regions {
+func (memory *MemoryMap) Conflicts(start platform.Paddr, size uint64) bool {
+    for _, orig_region := range *memory {
         if orig_region.Overlaps(start, size) {
             return true
         }
     }
-
     return false
 }
 
-func (memory *MemoryMap) add(region *TypedMemoryRegion) error {
-    if memory.HasConflict(region.Start, region.Size) {
+func (memory *MemoryMap) Add(region *TypedMemoryRegion) error {
+    if memory.Conflicts(region.Start, region.Size) {
         return MemoryConflict
     }
-    memory.regions = append(memory.regions, region)
+
+    *memory = append(*memory, region)
     sort.Sort(memory)
     return nil
 }
 
-func (memory *MemoryMap) remove(region *TypedMemoryRegion) error {
-    for i, orig_region := range memory.regions {
-        if orig_region.Start == region.Start &&
-            orig_region.Size == region.Size {
-
-            lost_region := memory.regions[i]
-
-            if i != len(memory.regions)-1 {
-                // Move the last element to this position.
-                memory.regions[i] = memory.regions[len(memory.regions)-1]
-            }
-            memory.regions = memory.regions[0 : len(memory.regions)-1]
-            sort.Sort(memory)
-
-            // Free memory if necessary.
-            if lost_region.allocated {
-                memory.vm.DeleteUserMemory(lost_region.mmap)
-            }
-
-            return nil
-        }
-    }
-    return MemoryNotFound
-}
-
 func (memory *MemoryMap) Max() platform.Paddr {
-
-    if len(memory.regions) == 0 {
+    if len(*memory) == 0 {
         // No memory available?
         return platform.Paddr(0)
     }
 
     // Return the highest available address.
-    top := memory.regions[len(memory.regions)-1]
+    top := (*memory)[len(*memory)-1]
     return top.End()
 }
 
-func (memory *MemoryMap) Allocate(
+func (memory *MemoryMap) Reserve(
+    vm *platform.Vm,
+    device Device,
     memtype MemoryType,
-    name string,
     start platform.Paddr,
     size uint64,
-    end platform.Paddr,
-    alignment uint) ([]byte, platform.Paddr, error) {
+    user []byte) error {
 
-    // Make sure the size is page-aligned.
-    size = platform.Align(size, platform.PageSize, true)
-
-    // Allocate new user memory.
-    var mmap []byte
-    var user unsafe.Pointer
-    if memtype == User || memtype == Acpi {
-        var err error
-        mmap, err = memory.vm.CreateUserMemory(size)
-        if err != nil {
-            return nil, platform.Paddr(0), err
-        }
-        user = unsafe.Pointer(&mmap[0])
-    }
-
-    region, err := memory.reserve(
+    _, err := memory.Select(
+        vm,
+        device,
         memtype,
-        name,
-        start,
-        size,
-        end,
-        alignment,
-        mmap,
-        user,
-        mmap != nil)
-    if err != nil {
-        if mmap != nil {
-            memory.vm.DeleteUserMemory(mmap)
-        }
-        return nil, region.Start, nil
-    }
-
-    // We're good.
-    return mmap, region.Start, nil
-}
-
-func (memory *MemoryMap) Load(
-    memtype MemoryType,
-    name string,
-    start platform.Paddr,
-    mmap []byte,
-    alignment uint) (platform.Paddr, error) {
-
-    // Make sure the size is page aligned.
-    size := platform.Align(uint64(len(mmap)), platform.PageSize, true)
-
-    region, err := memory.reserve(
-        memtype,
-        name,
-        start,
-        size,
-        memory.Max().Align(alignment, true),
-        alignment,
-        mmap,
-        unsafe.Pointer(&mmap[0]),
-        false)
-    if err != nil {
-        return region.Start, err
-    }
-
-    // We're good.
-    return region.Start, err
-}
-
-func (memory *MemoryMap) Set(
-    memtype MemoryType,
-    name string,
-    start platform.Paddr,
-    size uint64,
-    user unsafe.Pointer) error {
-
-    _, err := memory.reserve(
-        memtype,
-        name,
         start,
         size,
         start,
-        platform.PageSize,
-        nil,
-        user,
-        false)
-
+        user)
     return err
 }
 
-func (memory *MemoryMap) reserve(
+func (memory *MemoryMap) ReserveFind(
+    vm *platform.Vm,
+    device Device,
     memtype MemoryType,
-    name string,
     start platform.Paddr,
     size uint64,
     max platform.Paddr,
-    alignment uint,
-    mmap []byte,
-    user unsafe.Pointer,
-    allocated bool) (MemoryRegion, error) {
+    user []byte) (MemoryRegion, error) {
+
+    region, err := memory.Select(
+        vm,
+        device,
+        memtype,
+        start,
+        size,
+        max,
+        user)
+    if err != nil {
+        return region, err
+    }
+
+    return region, err
+}
+
+func (memory *MemoryMap) Select(
+    vm *platform.Vm,
+    device Device,
+    memtype MemoryType,
+    start platform.Paddr,
+    size uint64,
+    max platform.Paddr,
+    user []byte) (MemoryRegion, error) {
 
     // Ensure all targets are aligned.
     if (start.Align(platform.PageSize, false) != start) ||
@@ -237,97 +152,160 @@ func (memory *MemoryMap) reserve(
     }
 
     // Verbose messages.
-    log.Printf(
-        "memory: reserving (type: %d, align: %x) of size %x in [%x,%x) for %s...",
-        memtype,
-        alignment,
-        size,
-        start,
-        max.After(size),
-        name)
+    if device.IsDebugging() {
+        log.Printf(
+            "model: %s: reserving (type: %d) of size %x in [%x,%x]",
+            device.Name(),
+            memtype,
+            size,
+            start,
+            max.After(size-1))
+    }
 
-    var search platform.Paddr
+    search := start
+    var region *TypedMemoryRegion
 
-    for search = start.Align(alignment, true); search <= max; search = search.After(uint64(alignment)) {
-
-        if !memory.HasConflict(search, size) {
-            region := &TypedMemoryRegion{
+    // Can we find a region?
+    for search <= max {
+        if !memory.Conflicts(search, size) {
+            region = &TypedMemoryRegion{
                 MemoryRegion: MemoryRegion{search, size},
-                Type:         memtype,
-                mmap:         mmap,
+                MemoryType:   memtype,
+                Device:       device,
                 user:         user,
-                allocated:    allocated,
+                allocated:    make(map[uint64]uint64),
             }
-            err := memory.add(region)
+            err := memory.Add(region)
+            if err != nil {
+                return region.MemoryRegion, err
+            }
+        }
+        search += platform.PageSize
+    }
+
+    // Beyond our current max?
+    if search > memory.Max() && start <= memory.Max() {
+        region = &TypedMemoryRegion{
+            MemoryRegion: MemoryRegion{memory.Max(), size},
+            MemoryType:   memtype,
+            Device:       device,
+            user:         user,
+            allocated:    make(map[uint64]uint64),
+        }
+        err := memory.Add(region)
+        if err != nil {
             return region.MemoryRegion, err
         }
     }
 
-    // Beyond our current max?
-    if search > max {
-        region := &TypedMemoryRegion{
-            MemoryRegion: MemoryRegion{search, size},
-            Type:         memtype,
-            mmap:         mmap,
-            user:         user,
-            allocated:    allocated,
-        }
-        err := memory.add(region)
-        return region.MemoryRegion, err
+    // Nothing found.
+    if region == nil {
+        log.Printf("model: conflict for %s: %x bytes in [%x,%x].",
+            device.Name(),
+            size,
+            start,
+            max.After(size))
+        return MemoryRegion{}, MemoryConflict
     }
 
-    // Nothing found.
-    return MemoryRegion{}, MemoryNotFound
+    // Do the mapping.
+    var err error
+    switch region.MemoryType {
+    case MemoryTypeUser:
+        err = vm.MapUserMemory(region.Start, region.Size, region.user)
+    case MemoryTypeReserved:
+        err = vm.MapReservedMemory(region.Start, region.Size)
+    case MemoryTypeAcpi:
+        err = vm.MapUserMemory(region.Start, region.Size, region.user)
+    case MemoryTypeSpecial:
+        err = vm.MapSpecialMemory(region.Start)
+    }
+
+    // We're good?
+    return region.MemoryRegion, err
 }
 
-func (memory *MemoryMap) Map() error {
+func (memory *MemoryMap) Map(
+    addr platform.Paddr,
+    size uint64) ([]byte, error) {
 
-    // Setup each region.
-    for _, region := range memory.regions {
+    for i := 0; i < len(*memory); i += 1 {
 
-        var err error
+        region := (*memory)[i]
 
-        switch region.Type {
-        case User:
-            err = memory.vm.MapUserMemory(region.Start, region.Size, region.user)
-        case Reserved:
-            err = memory.vm.MapReservedMemory(region.Start, region.Size)
-        case Acpi:
-            err = memory.vm.MapUserMemory(region.Start, region.Size, region.user)
-        case Special:
-            region.Size, err = memory.vm.MapSpecialMemory(region.Start)
-        }
+        if region.Contains(addr, size) &&
+            region.MemoryType == MemoryTypeUser {
 
-        if err != nil {
-            memory.Unmap()
-            return err
+            // Mark it as used.
+            addr_offset := uint64(addr - region.Start)
+            for offset, alloc_size := range region.allocated {
+                if (addr_offset >= offset &&
+                    addr_offset < offset+alloc_size) ||
+                    (addr_offset+size >= offset &&
+                        addr_offset < offset) {
+
+                    // Already allocated?
+                    return nil, MemoryConflict
+                }
+            }
+
+            // Found it.
+            region.allocated[addr_offset] = size
+            return region.user[addr_offset : addr_offset+size], nil
         }
     }
+
+    return nil, MemoryNotFound
+}
+
+func (memory *MemoryMap) Allocate(
+    start platform.Paddr,
+    end platform.Paddr,
+    size uint64,
+    top bool) (platform.Paddr, []byte, error) {
+
+    if top {
+        for ; end >= start; end -= platform.PageSize {
+
+            mmap, _ := memory.Map(end, size)
+            if mmap != nil {
+                return end, mmap, nil
+            }
+        }
+
+    } else {
+        for ; start <= end; start += platform.PageSize {
+
+            mmap, _ := memory.Map(start, size)
+            if mmap != nil {
+                return start, mmap, nil
+            }
+        }
+    }
+
+    // Couldn't find available memory.
+    return platform.Paddr(0), nil, MemoryNotFound
+}
+
+func (memory *MemoryMap) Load(
+    start platform.Paddr,
+    end platform.Paddr,
+    data []byte,
+    top bool) (platform.Paddr, error) {
+
+    // Allocate the backing data.
+    addr, backing_mmap, err := memory.Allocate(
+        start,
+        end,
+        uint64(len(data)),
+        top)
+    if err != nil {
+        return platform.Paddr(0), err
+    }
+
+    // Copy it in.
+    copy(backing_mmap, data)
 
     // We're good.
-    return nil
-}
-
-func (memory *MemoryMap) Unmap() error {
-
-    // Teardown each region.
-    for _, region := range memory.regions {
-
-        switch region.Type {
-        case User:
-            memory.vm.UnmapUserMemory(region.Start, region.Size)
-
-        case Reserved:
-            memory.vm.UnmapReservedMemory(region.Start, region.Size)
-
-        case Acpi:
-            memory.vm.UnmapUserMemory(region.Start, region.Size)
-
-        case Special:
-            memory.vm.UnmapSpecialMemory(region.Start)
-        }
-    }
-
-    // Always succeed.
-    return nil
+    return addr, nil
 }

@@ -36,48 +36,11 @@ const (
 )
 
 type PciDevice struct {
-    // Generic info.
-    info *DeviceInfo
+    MmioDevice
 
     // Packed configuration data.
     // (This encodes the vendor/device, etc.)
-    conf []byte
-
-    // The config handlers.
-    PciConfig IoHandlers
-
-    // Our device lookup cache.
-    // (Used for accessing device conf data.)
-    cache *IoCache
-}
-
-func (pcidev *PciDevice) SetConf8(offset int, data uint8) {
-    pcidev.conf[offset] = byte(data)
-}
-func (pcidev *PciDevice) GetConf8(offset int) uint8 {
-    return pcidev.conf[offset]
-}
-
-func (pcidev *PciDevice) SetConf16(offset int, data uint16) {
-    pcidev.conf[offset] = byte(data & 0xff)
-    pcidev.conf[offset+1] = byte((data >> 8) & 0xff)
-}
-func (pcidev *PciDevice) GetConf16(offset int) uint16 {
-    return (uint16(pcidev.conf[offset]) |
-        (uint16(pcidev.conf[offset+1]) << 8))
-}
-
-func (pcidev *PciDevice) SetConf32(offset int, data uint32) {
-    pcidev.conf[offset] = byte(data & 0xff)
-    pcidev.conf[offset+1] = byte((data >> 8) & 0xff)
-    pcidev.conf[offset+2] = byte((data >> 16) & 0xff)
-    pcidev.conf[offset+3] = byte((data >> 24) & 0xff)
-}
-func (pcidev *PciDevice) GetConf32(offset int) uint32 {
-    return (uint32(pcidev.conf[offset]) |
-        (uint32(pcidev.conf[offset+1]) << 8) |
-        (uint32(pcidev.conf[offset+2]) << 16) |
-        (uint32(pcidev.conf[offset+3]) << 24))
+    config NvRam
 }
 
 //
@@ -90,14 +53,21 @@ func (pcidev *PciDevice) GetConf32(offset int) uint32 {
 // These aren't real hardware -- why should they be so complex?
 
 type PciBus struct {
+    PioDevice
+
     // On bus devices.
     devices []*PciDevice
 
     // The last device selected.
     // See below in PciConfAddr.Read().
-    addr   uint64     // The actual address.
-    offset uint64     // The offset component.
-    last   *PciDevice // The device selected.
+    Addr   uint64 `json:"config-address"`
+    Offset uint64 `json:"config-offset"`
+
+    // The device selected.
+    last *PciDevice
+
+    // Refresh to the model flush().
+    flush func() error
 }
 
 const (
@@ -112,57 +82,42 @@ type PciConfData struct {
 }
 
 func (reg *PciConfAddr) Read(offset uint64, size uint) (uint64, error) {
-    return reg.PciBus.addr, nil
+    return reg.PciBus.Addr, nil
 }
 
 func (reg *PciConfAddr) Write(offset uint64, size uint, value uint64) error {
     // Save the address.
-    reg.PciBus.addr = value
+    reg.PciBus.Addr = value
+    return reg.PciBus.SelectLast()
+}
+
+func (pcibus *PciBus) SelectLast() error {
+
+    // Load our address.
+    value := pcibus.Addr
 
     // Try to select the device.
     bus := (value >> 16) & 0x7fff
     device := (value >> 11) & 0x1f
     function := (value >> 8) & 0x7
-    reg.PciBus.offset = value & 0xff
+    pcibus.Offset = value & 0xff
 
     if bus != 0 {
-        reg.PciBus.last = nil
+        pcibus.last = nil
         return nil
     }
     if function != 0 {
-        reg.PciBus.last = nil
+        pcibus.last = nil
         return nil
     }
-    if len(reg.PciBus.devices) <= int(device) {
-        reg.PciBus.last = nil
+    if len(pcibus.devices) <= int(device) {
+        pcibus.last = nil
         return nil
     }
 
     // Found one.
-    reg.PciBus.last = reg.PciBus.devices[device]
+    pcibus.last = pcibus.devices[device]
     return nil
-}
-
-type PciEvent struct {
-    size  uint
-    data  uint64
-    write bool
-}
-
-func (mmio PciEvent) Size() uint {
-    return mmio.size
-}
-
-func (mmio PciEvent) GetData() uint64 {
-    return mmio.data
-}
-
-func (mmio PciEvent) SetData(val uint64) {
-    mmio.data = val
-}
-
-func (mmio PciEvent) IsWrite() bool {
-    return mmio.write
 }
 
 func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
@@ -175,33 +130,24 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
     }
 
     // Is it greater than our built-in config?
-    if int(reg.PciBus.offset) >= len(reg.PciBus.last.conf) {
-        // Submit to the device handler.
-        addr := platform.Paddr(int(reg.PciBus.offset) - len(reg.PciBus.last.conf))
-        handler := reg.PciBus.last.cache.lookup(addr)
-        io_event := &PciEvent{size, 0, false}
-        err := handler.queue.Submit(
-            io_event,
-            addr.OffsetFrom(handler.MemoryRegion.Start))
-        if err != nil {
-            return value, err
-        }
-        value = io_event.data
+    if int(reg.PciBus.Offset) >= len(reg.PciBus.last.config) {
+        // Ignore.
+        return value, nil
 
-    } else {
-        // Is it a known register?
-        switch reg.PciBus.offset {
-        }
+    }
 
-        // Handle default.
-        switch size {
-        case 1:
-            value = uint64(reg.PciBus.last.GetConf8(int(reg.PciBus.offset)))
-        case 2:
-            value = uint64(reg.PciBus.last.GetConf16(int(reg.PciBus.offset)))
-        case 4:
-            value = uint64(reg.PciBus.last.GetConf32(int(reg.PciBus.offset)))
-        }
+    // Is it a known register?
+    switch reg.PciBus.Offset {
+    }
+
+    // Handle default.
+    switch size {
+    case 1:
+        value = uint64(reg.PciBus.last.config.Get8(int(reg.PciBus.Offset)))
+    case 2:
+        value = uint64(reg.PciBus.last.config.Get16(int(reg.PciBus.Offset)))
+    case 4:
+        value = uint64(reg.PciBus.last.config.Get32(int(reg.PciBus.Offset)))
     }
 
     // Debugging?
@@ -209,7 +155,7 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
         log.Printf("pci-bus:%s: config read %x @ %x",
             reg.PciBus.last.info.Name,
             value,
-            reg.PciBus.offset)
+            reg.PciBus.Offset)
     }
 
     return value, nil
@@ -231,36 +177,30 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
     }
 
     // Is it greater than our built-in config?
-    if int(reg.PciBus.offset) >= len(reg.PciBus.last.conf) {
-        // Submit to the device handler.
-        addr := platform.Paddr(int(reg.PciBus.offset) - len(reg.PciBus.last.conf))
-        handler := reg.PciBus.last.cache.lookup(addr)
-        io_event := &PciEvent{size, value, true}
-        return handler.queue.Submit(
-            io_event,
-            addr.OffsetFrom(handler.MemoryRegion.Start))
+    if int(reg.PciBus.Offset) >= len(reg.PciBus.last.config) {
+        // Ignore.
+        return nil
     }
 
     // Is it a known register?
-    switch reg.PciBus.offset {
+    switch reg.PciBus.Offset {
     }
 
     // Handle default.
     switch size {
     case 1:
-        reg.PciBus.last.SetConf8(int(reg.PciBus.offset), uint8(value))
+        reg.PciBus.last.config.Set8(int(reg.PciBus.Offset), uint8(value))
     case 2:
-        reg.PciBus.last.SetConf16(int(reg.PciBus.offset), uint16(value))
+        reg.PciBus.last.config.Set16(int(reg.PciBus.Offset), uint16(value))
     case 4:
-        reg.PciBus.last.SetConf32(int(reg.PciBus.offset), uint32(value))
+        reg.PciBus.last.config.Set32(int(reg.PciBus.Offset), uint32(value))
     }
 
     return nil
 }
 
-func (bus *PciBus) NewDevice(
+func NewPciDevice(
     info *DeviceInfo,
-    config IoMap,
     vendor_id PciVendorId,
     device_id PciDeviceId,
     class PciClass,
@@ -269,86 +209,91 @@ func (bus *PciBus) NewDevice(
     subsystem_vendor uint16) (*PciDevice, error) {
 
     // Create the pci device.
-    pci_device := new(PciDevice)
-    pci_device.info = info
-    pci_device.PciConfig = make(IoHandlers)
-    pci_device.conf = make([]byte, 0x40, 0x40)
-    for region, ops := range config {
-        pci_device.PciConfig[region] = NewIoHandler(
-            pci_device.info, region, ops)
-    }
-    pci_device.cache = NewIoCache([]*IoHandlers{&pci_device.PciConfig})
+    device := new(PciDevice)
+    device.config = make(NvRam, 0x40, 0x40)
+    device.Init(info)
 
     // Set our configuration space.
-    pci_device.SetConf16(0x0, uint16(vendor_id))
-    pci_device.SetConf16(0x2, uint16(device_id))
-    pci_device.SetConf8(0x8, uint8(revision))
-    pci_device.SetConf8(0x9, uint8(0)) // Prog IF.
-    pci_device.SetConf8(0xa, uint8(0)) // Subclass.
-    pci_device.SetConf8(0xb, uint8(class))
-
-    pci_device.SetConf8(0xe, 0x0) // Type.
-    pci_device.SetConf16(0x2c, subsystem_vendor)
-    pci_device.SetConf16(0x2e, subsystem_id)
-
-    // Append it to our list.
-    bus.devices = append(bus.devices, pci_device)
+    device.config.Set16(0x0, uint16(vendor_id))
+    device.config.Set16(0x2, uint16(device_id))
+    device.config.Set8(0x8, uint8(revision))
+    device.config.Set8(0x9, uint8(0)) // Prog IF.
+    device.config.Set8(0xa, uint8(0)) // Subclass.
+    device.config.Set8(0xb, uint8(class))
+    device.config.Set8(0xe, 0x0) // Type.
+    device.config.Set16(0x2c, subsystem_vendor)
+    device.config.Set16(0x2e, subsystem_id)
 
     // Return the pci device.
-    return pci_device, nil
+    return device, nil
 }
 
-func NewPciBus(info *DeviceInfo) (*PciBus, *Device, error) {
+func (pcibus *PciBus) AddDevice(device *PciDevice) error {
+
+    // Append it to our list.
+    pcibus.devices = append(pcibus.devices, device)
+    return pcibus.Refresh()
+}
+
+func (pcibus *PciBus) Refresh() error {
+
+    // Rebuild our IoHandlers.
+    pcibus.IoHandlers = make(IoHandlers)
+    for _, device := range pcibus.devices {
+        for region, handler := range device.MmioHandlers() {
+            pcibus.IoHandlers[region] = handler
+        }
+    }
+
+    // Reset the model I/O cache.
+    return pcibus.flush()
+}
+
+func (pcibus *PciBus) MmioHandlers() IoHandlers {
+    return pcibus.IoHandlers
+}
+
+func NewPciBus(info *DeviceInfo) (Device, error) {
 
     // Create the bus.
     bus := new(PciBus)
     bus.devices = make([]*PciDevice, 0, 0)
-    info.Load(bus)
-
-    // Create a bus device.
-    hostbridge, err := bus.NewDevice(
-        info,
-        IoMap{},
-        PciVendorId(0x1022), // AMD.
-        PciDeviceId(0x7432), // Made-up.
-        PciClassBridge,
-        PciRevision(0),
-        0,
-        0)
-    if err != nil {
-        return nil, nil, err
+    bus.PioDevice.IoMap = IoMap{
+        // Our configuration ports.
+        MemoryRegion{0xcf8, 4}: &PciConfAddr{bus},
+        MemoryRegion{0xcfc, 4}: &PciConfData{bus},
     }
-    hostbridge.conf[0x6] = 0x10 // Caps present.
-    hostbridge.conf[0xe] = 1    // Type.
-
-    // Add our capabilities.
-    hostbridge.conf[0x34] = 0x40                          // Cap pointer.
-    hostbridge.conf = append(hostbridge.conf, byte(0x40)) // Type port root.
-    hostbridge.conf = append(hostbridge.conf, byte(0))    // End of cap pointer.
-
-    // Create the device.
-    device, err := NewDevice(
-        info,
-        IoMap{
-            // Our configuration ports.
-            MemoryRegion{0xcf8, 4}: &PciConfAddr{bus},
-            MemoryRegion{0xcfc, 4}: &PciConfData{bus},
-        },
-        0,  // Port-I/O offset.
-        IoMap{},
-        0,  // Memory-I/O offset.
-    )
 
     // Return our bus and device.
-    return bus, device, err
+    return bus, bus.Init(info)
 }
 
-func LoadPciBus(model *Model, info *DeviceInfo) error {
+func (pcibus *PciBus) Attach(vm *platform.Vm, model *Model) error {
 
-    _, device, err := NewPciBus(info)
-    if err != nil {
-        return err
+    // Ensure we have a device.
+    pcibus.SelectLast()
+
+    // Save the flush function.
+    pcibus.flush = model.flush
+
+    return pcibus.PioDevice.Attach(vm, model)
+}
+
+func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
+
+    // Find our pcibus.
+    var ok bool
+    var pcibus *PciBus
+    for _, device := range model.devices {
+        pcibus, ok = device.(*PciBus)
+        if pcibus != nil && ok {
+            break
+        }
+    }
+    if pcibus == nil {
+        return PciBusNotFound
     }
 
-    return model.AddDevice(device)
+    // Attach to the PciBus.
+    return pcibus.AddDevice(pcidevice)
 }

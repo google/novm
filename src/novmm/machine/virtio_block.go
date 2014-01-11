@@ -1,26 +1,18 @@
 package machine
 
-func LoadVirtioMmioBlock(
-    model *Model,
-    info *DeviceInfo) error {
+type VirtioBlockDevice struct {
+    *VirtioDevice
 
-    _, err := LoadMmioVirtioDevice(
-        model,
-        info,
-        VirtioTypeBlock)
-
-    return err
+    // The backing file.
+    Fd  int `json:"fd"`
 }
 
-func LoadVirtioPciBlock(
-    model *Model,
-    info *DeviceInfo) error {
+func NewVirtioMmioBlock(info *DeviceInfo) (Device, error) {
+    device, err := NewMmioVirtioDevice(info, VirtioTypeBlock)
+    return &VirtioBlockDevice{VirtioDevice: device}, err
+}
 
-    _, err := LoadPciVirtioDevice(
-        model,
-        info,
-        PciClassStorage,
-        VirtioTypeBlock)
-
-    return err
+func NewVirtioPciBlock(info *DeviceInfo) (Device, error) {
+    device, err := NewPciVirtioDevice(info, PciClassStorage, VirtioTypeBlock)
+    return &VirtioBlockDevice{VirtioDevice: device}, err
 }

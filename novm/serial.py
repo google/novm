@@ -11,6 +11,8 @@ from . import virtio
 
 class Console(virtio.Device):
 
+    virtio_driver = "console"
+
     def __init__(
             self,
             path=None,
@@ -34,27 +36,23 @@ class Console(virtio.Device):
         self._sock.bind(path)
         self._sock.listen(1)
 
-    def device(self):
-        return super(Console, self)._device(
-            driver="console",
-            data={
-                "fd": self._sock.fileno(),
-            },
-        )
+    def data(self):
+        return {
+            "fd": self._sock.fileno()
+        }
 
     def info(self):
         return self._info
 
 class Com1(device.Device):
 
-    def device(self):
-        return super(Com1, self)._device(
-            driver="uart",
-            data={
-                "address": 0x3f8,
-                "interrupt": 4,
-            },
-        )
+    driver = "uart"
+
+    def data(self):
+        return {
+            "base": 0x3f8,
+            "interrupt": 4,
+        }
 
     def cmdline(self):
         return "console=uart,io,0x3f8"
@@ -64,14 +62,13 @@ class Com1(device.Device):
 
 class Com2(device.Device):
 
-    def device(self):
-        return super(Com2, self)._device(
-            driver="uart",
-            data={
-                "address": 0x2f8,
-                "interrupt": 3,
-            },
-        )
+    driver = "uart"
+
+    def data(self):
+        return {
+            "base": 0x2f8,
+            "interrupt": 3,
+        }
 
     def cmdline(self):
         return "console=uart,io,0x2f8"

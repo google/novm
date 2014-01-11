@@ -17,6 +17,8 @@ const int CreatePit2 = KVM_CREATE_PIT2;
 const int SetGuestDebug = KVM_SET_GUEST_DEBUG;
 const int SetMpState = KVM_SET_MP_STATE;
 const int Translate = KVM_TRANSLATE;
+const int GetSupportedCpuid = KVM_GET_SUPPORTED_CPUID;
+const int SetCpuid = KVM_SET_CPUID2;
 
 // States.
 const int MpStateRunnable = KVM_MP_STATE_RUNNABLE;
@@ -36,6 +38,7 @@ const int CapIoFd = KVM_CAP_IOEVENTFD;
 const int CapIrqFd = KVM_CAP_IRQFD;
 const int CapPit2 = KVM_CAP_PIT2;
 const int CapGuestDebug = KVM_CAP_SET_GUEST_DEBUG;
+const int CapCpuid = KVM_CAP_EXT_CPUID;
 
 // We need to fudge the types for irq level.
 // This is because of the extremely annoying semantics
@@ -50,6 +53,38 @@ static int check_irq_level(void) {
         return 1;
     } else {
         return 0;
+    }
+}
+
+static void cpuid_init(void *data, int size) {
+    struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)data;
+    cpuid->nent = (size - sizeof(struct kvm_cpuid2))
+        / sizeof(struct kvm_cpuid_entry);
+}
+
+static void cpuid_finish(void *data) {
+    struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)data;
+    int n;
+    __u32 eax, ebx, ecx, edx;
+
+    for( n = 0; n < cpuid->nent; n += 1 ) {
+        if (cpuid->entries[n].function == 0) {
+            eax = 0;
+            asm volatile("cpuid"
+                :"=a"(eax),"=b"(ebx),"=c"(ecx),"=d"(edx)
+                :"a"(eax));
+            cpuid->entries[n].ecx = ecx;
+            cpuid->entries[n].ebx = ebx;
+            cpuid->entries[n].edx = edx;
+        }
+        if (cpuid->entries[n].function == 1) {
+            eax = 1;
+            asm volatile("cpuid"
+                :"=a"(eax),"=b"(ebx),"=c"(ecx),"=d"(edx)
+                :"a"(eax));
+            cpuid->entries[n].eax = eax;
+            cpuid->entries[n].eax = eax;
+        }
     }
 }
 
@@ -86,6 +121,7 @@ var requiredCapabilities = []kvmCapability{
     kvmCapability{"IO Event FD", uintptr(C.CapIoFd)},
     kvmCapability{"IRQ Event FD", uintptr(C.CapIrqFd)},
     kvmCapability{"PIT2", uintptr(C.CapPit2)},
+    kvmCapability{"CPUID", uintptr(C.CapCpuid)},
 
     // It does seem to be the case that this capability
     // is not advertised correctly. On my kernel (3.11),
@@ -99,21 +135,26 @@ var requiredCapabilities = []kvmCapability{
     // kvmCapability{"Read-only Memory", uintptr(C.CapReadOnlyMem)},
 }
 
-type KvmVm struct {
+type Vm struct {
     // The VM fd.
     fd  int
 
     // The next vcpu to create.
-    vcpu_id int
+    next_id int
 
     // The next memory region slot to create.
+    // This is not serialized because we will
+    // recreate all regions (and the ordering
+    // may even be different the 2nd time round).
     mem_region int
+
+    // Our cpuid data.
+    // At the moment, we just expose the full
+    // host flags to the guest.
+    cpuid []byte
 }
 
-type KvmVcpu struct {
-    // The VM.
-    vm  *KvmVm
-
+type Vcpu struct {
     // The VCPU fd.
     fd  int
 
@@ -127,29 +168,26 @@ type KvmVcpu struct {
     kvm  *C.struct_kvm_run
 
     // Cached registers.
-    regs         C.struct_kvm_regs
-    sregs        C.struct_kvm_sregs
+    // See data.go for the serialization code.
+    regs  C.struct_kvm_regs
+    sregs C.struct_kvm_sregs
+
+    // Caching parameters.
     regs_cached  bool
     sregs_cached bool
     regs_dirty   bool
     sregs_dirty  bool
 }
 
-type KvmIrqChip struct{}
-
-type KvmMemoryRegion struct {
-    // The start and size.
-    start uint64
-    size  uint64
-
-    // Our mmap'ed region.
-    mmap []byte
-}
-
 // The size of the mmap structure.
 var mmapSize int
 var mmapSizeOnce sync.Once
 var mmapSizeError error
+
+// Our cpuid data.
+var cpuidData []byte
+var cpuidDataOnce sync.Once
+var cpuidDataError error
 
 func getMmapSize(fd int) {
     // Get the size of the Mmap structure.
@@ -163,11 +201,40 @@ func getMmapSize(fd int) {
         mmapSizeError = e
     } else {
         mmapSize = int(r)
-        mmapSizeError = nil
     }
 }
 
-func NewVm() (Vm, error) {
+func getCpuidData(fd int) {
+
+    cpuidData = make([]byte, PageSize, PageSize)
+    cpuid := unsafe.Pointer(&cpuidData[0])
+    C.cpuid_init(cpuid, PageSize)
+
+    for {
+        _, _, e := syscall.Syscall(
+            syscall.SYS_IOCTL,
+            uintptr(fd),
+            uintptr(C.GetSupportedCpuid),
+            uintptr(unsafe.Pointer(&cpuidData[0])))
+
+        if e == syscall.ENOMEM {
+            // The nent field will now have been
+            // adjusted, and we can run it again.
+            continue
+        } else if e != 0 {
+            cpuidDataError = e
+            break
+        }
+
+        // We're good!
+        break
+    }
+
+    // Finish it off.
+    C.cpuid_finish(cpuid)
+}
+
+func NewVm() (*Vm, error) {
     fd, err := syscall.Open("/dev/kvm", syscall.O_RDWR, 0)
     if err != nil {
         return nil, err
@@ -198,6 +265,12 @@ func NewVm() (Vm, error) {
         return nil, mmapSizeError
     }
 
+    // Make sure we have cpuid data.
+    cpuidDataOnce.Do(func() { getCpuidData(fd) })
+    if cpuidDataError != nil {
+        return nil, cpuidDataError
+    }
+
     // Create new VM.
     vmfd, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
@@ -210,7 +283,7 @@ func NewVm() (Vm, error) {
 
     // Prepare our VM object.
     log.Print("kvm: VM created.")
-    vm := &KvmVm{fd: int(vmfd)}
+    vm := &Vm{fd: int(vmfd)}
 
     // Try to create an IRQ chip.
     err = vm.createIrqChip()
@@ -249,19 +322,33 @@ func checkCapability(
     return nil
 }
 
-func (vm *KvmVm) Dispose() error {
+func (vm *Vm) Dispose() error {
     return syscall.Close(vm.fd)
 }
 
-func (vm *KvmVm) NewVcpu() (Vcpu, error) {
+func (vm *Vm) VcpuCount() int {
+    return vm.next_id + 1
+}
+
+func (vm *Vm) NewVcpu() (*Vcpu, error) {
     // Create a new Vcpu.
-    vcpu_id := vm.vcpu_id
+    vcpu_id := vm.next_id
     log.Printf("kvm: creating VCPU (id: %d)...", vcpu_id)
     vcpufd, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
         uintptr(C.CreateVcpu),
         uintptr(vcpu_id))
+    if e != 0 {
+        return nil, e
+    }
+
+    // Set our vcpuid.
+    _, _, e = syscall.Syscall(
+        syscall.SYS_IOCTL,
+        uintptr(vcpufd),
+        uintptr(C.SetCpuid),
+        uintptr(unsafe.Pointer(&cpuidData[0])))
     if e != 0 {
         return nil, e
     }
@@ -281,18 +368,17 @@ func (vm *KvmVm) NewVcpu() (Vcpu, error) {
     kvm_run := (*C.struct_kvm_run)(unsafe.Pointer(&mmap[0]))
 
     // Bump our next vcpu id.
-    vm.vcpu_id += 1
+    vm.next_id += 1
 
     // Return our VCPU object.
-    return &KvmVcpu{
-        vm:      vm,
+    return &Vcpu{
         fd:      int(vcpufd),
         vcpu_id: vcpu_id,
         mmap:    mmap,
         kvm:     kvm_run}, nil
 }
 
-func (vm *KvmVm) createIrqChip() error {
+func (vm *Vm) createIrqChip() error {
     // No parameters needed, just create the chip.
     // This is called as the VM is being created in
     // order to ensure that all future vcpus will have
@@ -318,7 +404,7 @@ func (vm *KvmVm) createIrqChip() error {
     return nil
 }
 
-func (vm *KvmVm) createPit() error {
+func (vm *Vm) createPit() error {
     // Prepare the PIT config.
     // The only flag supported at the time of writing
     // was KVM_PIT_SPEAKER_DUMMY, which I really have no
@@ -340,7 +426,7 @@ func (vm *KvmVm) createPit() error {
     return nil
 }
 
-func (vm *KvmVm) Interrupt(
+func (vm *Vm) Interrupt(
     irq Irq,
     level bool) error {
 
@@ -366,32 +452,10 @@ func (vm *KvmVm) Interrupt(
     return nil
 }
 
-func (vm *KvmVm) CreateUserMemory(
-    size uint64) ([]byte, error) {
-
-    // Create a private backing region.
-    mmap, err := syscall.Mmap(
-        -1,
-        0,
-        int(size),
-        syscall.PROT_READ|syscall.PROT_WRITE,
-        syscall.MAP_ANONYMOUS|syscall.MAP_SHARED)
-    if err != nil || mmap == nil {
-        return nil, err
-    }
-
-    // Return our mapping.
-    return mmap, nil
-}
-
-func (vm *KvmVm) DeleteUserMemory(mmap []byte) error {
-    return syscall.Munmap(mmap)
-}
-
-func (vm *KvmVm) MapUserMemory(
+func (vm *Vm) MapUserMemory(
     start Paddr,
     size uint64,
-    mmap unsafe.Pointer) error {
+    mmap []byte) error {
 
     // See NOTE above about read-only memory.
     // As we will not support it for the moment,
@@ -403,14 +467,14 @@ func (vm *KvmVm) MapUserMemory(
     region.flags = C.__u32(0)
     region.guest_phys_addr = C.__u64(start)
     region.memory_size = C.__u64(size)
-    region.userspace_addr = C.__u64(uintptr(mmap))
+    region.userspace_addr = C.__u64(uintptr(unsafe.Pointer(&mmap[0])))
 
     // Execute the ioctl.
     log.Printf(
-        "kvm: creating %x byte memory region [%x, %x)...",
+        "kvm: creating %x byte memory region [%x,%x]...",
         size,
         start,
-        uint64(start)+size)
+        uint64(start)+size-1)
     _, _, e := syscall.Syscall(syscall.SYS_IOCTL,
         uintptr(vm.fd),
         uintptr(C.SetUserMemoryRegion),
@@ -424,15 +488,7 @@ func (vm *KvmVm) MapUserMemory(
     return nil
 }
 
-func (vm *KvmVm) UnmapUserMemory(
-    start Paddr,
-    size uint64) error {
-
-    // Ignore.
-    return nil
-}
-
-func (vm *KvmVm) MapReservedMemory(
+func (vm *Vm) MapReservedMemory(
     start Paddr,
     size uint64) error {
 
@@ -440,23 +496,7 @@ func (vm *KvmVm) MapReservedMemory(
     return nil
 }
 
-func (vm *KvmVm) UnmapReservedMemory(
-    start Paddr,
-    size uint64) error {
-
-    // Ignore.
-    return nil
-}
-
-func (vm *KvmVm) Dump() {
-    // Nothing to see here.
-}
-
-func (vcpu *KvmVcpu) Vm() Vm {
-    return vcpu.vm
-}
-
-func (vcpu *KvmVcpu) setSingleStep(on bool) error {
+func (vcpu *Vcpu) setSingleStep(on bool) error {
 
     // Execute our debug ioctl.
     var guest_debug C.struct_kvm_guest_debug
@@ -478,7 +518,7 @@ func (vcpu *KvmVcpu) setSingleStep(on bool) error {
     return nil
 }
 
-func (vcpu *KvmVcpu) Dispose() error {
+func (vcpu *Vcpu) Dispose() error {
 
     // Halt the processor.
     var mp_state C.struct_kvm_mp_state
@@ -497,7 +537,7 @@ func (vcpu *KvmVcpu) Dispose() error {
     return syscall.Close(vcpu.fd)
 }
 
-func (vcpu *KvmVcpu) Translate(
+func (vcpu *Vcpu) Translate(
     vaddr Vaddr) (Paddr, bool, bool, bool, error) {
 
     // Perform the translation.
@@ -518,66 +558,4 @@ func (vcpu *KvmVcpu) Translate(
     usermode := translation.valid != C.__u8(0)
 
     return paddr, valid, writeable, usermode, nil
-}
-
-func (mem *KvmMemoryRegion) Map() []byte {
-    return mem.mmap
-}
-
-func (mem *KvmMemoryRegion) Start() Paddr {
-    return Paddr(mem.start)
-}
-
-func (mem *KvmMemoryRegion) Size() uint64 {
-    return mem.size
-}
-
-func (mem *KvmMemoryRegion) End() Paddr {
-    return Paddr(mem.start + mem.size)
-}
-
-func (mem *KvmMemoryRegion) Dump() {
-    log.Printf("kvm: memory region @ [0x%08x, 0x%08x):",
-        mem.start, mem.start+mem.size)
-
-    if mem.mmap == nil {
-        log.Print("kvm:  [reserved]")
-        return
-    }
-
-    is_zero_page := true
-    last_non_zero := uint64(0)
-
-    // Print our any interesting sections.
-    for i := uint64(0); i < mem.size; i += 1 {
-
-        if is_zero_page &&
-            mem.mmap[i] != 0 &&
-            i+8 < uint64(len(mem.mmap)) {
-
-            log.Printf("kvm:  {0x%08x}", mem.start+i)
-            log.Printf("kvm:  %02x %02x %02x %02x %02x %02x %02x %02x ...",
-                mem.mmap[i+0], mem.mmap[i+1], mem.mmap[i+2], mem.mmap[i+3],
-                mem.mmap[i+4], mem.mmap[i+5], mem.mmap[i+6], mem.mmap[i+7])
-            is_zero_page = false
-            last_non_zero = i
-
-        } else if !is_zero_page &&
-            mem.mmap[i] != 0 {
-
-            last_non_zero = i
-
-        } else if !is_zero_page &&
-            i-last_non_zero > PageSize/2 {
-
-            is_zero_page = true
-        }
-    }
-}
-
-func (mem *KvmMemoryRegion) Dispose() error {
-    if mem.mmap != nil {
-        return syscall.Munmap(mem.mmap)
-    }
-    return nil
 }

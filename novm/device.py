@@ -6,6 +6,8 @@ from . import utils
 
 class Device(object):
 
+    debug = False
+
     def __init__(
             self,
             name=None,
@@ -17,23 +19,30 @@ class Device(object):
         self._name = name
 
         # Debugging?
-        self._debug = utils.asbool(debug)
+        self._debug = self.debug or utils.asbool(debug)
 
     def info(self):
-        raise NotImplementedError()
-
-    def cmdline(self):
+        """ User-displayed device info. """
         return None
 
-    def _device(self, driver, data=None):
-        if data is None:
-            data = {}
-        return {
-            "driver": driver,
-            "name": self._name or driver,
-            "debug": self._debug,
-            "data": data,
-        }
+    def cmdline(self):
+        """ Return a Linux cmdline paramter. """
+        return None
 
-    def device(self):
+    @property
+    def driver(self):
+        """ Return the driver for novmm. """
         raise NotImplementedError()
+
+    def data(self):
+        """ Device data (encoded on startup). """
+        return None
+
+    def arg(self):
+        """ Returns the full device specification. """
+        return {
+            "driver": self.driver,
+            "name": self._name or self.driver,
+            "debug": self._debug,
+            "data": self.data(),
+        }

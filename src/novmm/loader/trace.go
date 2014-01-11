@@ -34,7 +34,7 @@ func (tracer *Tracer) Disable() {
 }
 
 func (tracer *Tracer) toPaddr(
-    vcpu platform.Vcpu,
+    vcpu *platform.Vcpu,
     reg platform.RegisterValue) string {
 
     phys_addr, valid, _, _, err := vcpu.Translate(platform.Vaddr(reg))
@@ -49,7 +49,7 @@ func (tracer *Tracer) toPaddr(
     return fmt.Sprintf("%x", reg)
 }
 
-func (tracer *Tracer) Trace(vcpu platform.Vcpu, step bool) error {
+func (tracer *Tracer) Trace(vcpu *platform.Vcpu, step bool) error {
 
     // Are we on?
     if !tracer.enabled {

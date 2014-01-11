@@ -71,7 +71,7 @@ func kvmExitUnknown(
     })
 }
 
-func (vcpu *KvmVcpu) GetExitError() error {
+func (vcpu *Vcpu) GetExitError() error {
     // Handle the error.
     switch C.int(vcpu.kvm.exit_reason) {
     case C.ExitReasonMmio:

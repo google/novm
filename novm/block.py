@@ -6,6 +6,8 @@ from . import virtio
 
 class Disk(virtio.Device):
 
+    virtio_driver = "block"
+
     def __init__(
             self,
             index=0,
@@ -29,14 +31,11 @@ class Disk(virtio.Device):
         # Open the device.
         self._file = open(filename, 'w+b')
 
-    def device(self):
-        return super(Disk, self)._device(
-            driver="block",
-            data={
-                "device": self._info["device"],
-                "fd": self._file.fileno(),
-            },
-        )
+    def data(self):
+        return {
+            "device": self._info["device"],
+            "fd": self._file.fileno(),
+        }
 
     def info(self):
         return self._info

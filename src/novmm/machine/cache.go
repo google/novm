@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "novmm/platform"
 )
 
@@ -18,7 +17,7 @@ import (
 // That was sort of the long-term idea for the cache.
 
 type IoCache struct {
-    handlers []*IoHandlers
+    handlers []IoHandlers
     memory   map[platform.Paddr]*IoHandler
     hits     map[platform.Paddr]uint64
 }
@@ -33,7 +32,7 @@ func (cache *IoCache) lookup(addr platform.Paddr) *IoHandler {
 
     // See if we can find a matching device.
     for _, handlers := range cache.handlers {
-        for port_region, handler := range *handlers {
+        for port_region, handler := range handlers {
             if port_region.Contains(addr, 1) {
                 cache.memory[addr] = handler
                 cache.hits[addr] += 1
@@ -43,12 +42,10 @@ func (cache *IoCache) lookup(addr platform.Paddr) *IoHandler {
     }
 
     // Nothing found.
-    log.Fatal("Cache miss!? Shouldn't happen.")
-    cache.memory[addr] = nil
     return nil
 }
 
-func NewIoCache(handlers []*IoHandlers) *IoCache {
+func NewIoCache(handlers []IoHandlers) *IoCache {
     return &IoCache{
         handlers: handlers,
         memory:   make(map[platform.Paddr]*IoHandler),

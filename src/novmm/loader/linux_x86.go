@@ -110,9 +110,9 @@ var Linux64Convention = Convention{
 }
 
 func SetupLinux(
-    vcpu platform.Vcpu,
+    vcpu *platform.Vcpu,
     model *machine.Model,
-    orig_boot_params_data []byte,
+    orig_boot_data []byte,
     entry_point uint64,
     is_64bit bool,
     initrd_addr platform.Paddr,
@@ -121,13 +121,11 @@ func SetupLinux(
 
     // Copy in the GDT table.
     // These match the segments below.
-    gdt, gdt_addr, err := model.Allocate(
-        machine.User,
-        "gdt",
+    gdt_addr, gdt, err := model.Allocate(
         0,                 // Start.
-        platform.PageSize, // Size.
         model.Max(),       // End.
-        platform.PageSize) // Alignment.
+        platform.PageSize, // Size.
+        false)             // From bottom.
     if err != nil {
         return err
     }
@@ -186,33 +184,27 @@ func SetupLinux(
     // only a page of pages, as we use huge page sizes.
     if is_64bit {
         // Create our page tables.
-        pde, pde_addr, err := model.Allocate(
-            machine.User,
-            "pde",
+        pde_addr, pde, err := model.Allocate(
             0,                 // Start.
-            platform.PageSize, // Alignment.
             model.Max(),       // End.
-            platform.PageSize) // Size.
+            platform.PageSize, // Size.
+            false)             // From bottom.
         if err != nil {
             return err
         }
-        pgd, pgd_addr, err := model.Allocate(
-            machine.User,
-            "pgd",
+        pgd_addr, pgd, err := model.Allocate(
             0,                 // Start.
-            platform.PageSize, // Alignment.
             model.Max(),       // End.
-            platform.PageSize) // Size.
+            platform.PageSize, // Size.
+            false)             // From bottom.
         if err != nil {
             return err
         }
-        pml4, pml4_addr, err := model.Allocate(
-            machine.User,
-            "pml4",
+        pml4_addr, pml4, err := model.Allocate(
             0,                 // Start.
-            platform.PageSize, // Alignment.
             model.Max(),       // End.
-            platform.PageSize) // Size.
+            platform.PageSize, // Size.
+            false)             // From bottom.
         if err != nil {
             return err
         }
@@ -221,9 +213,9 @@ func SetupLinux(
         C.build_pgd(unsafe.Pointer(&pgd[0]), C.__u64(pde_addr), platform.PageSize)
         C.build_pml4(unsafe.Pointer(&pml4[0]), C.__u64(pgd_addr), platform.PageSize)
 
-        log.Printf("loader: Created PDE @ 0x%08x.", pde_addr)
-        log.Printf("loader: Created PGD @ 0x%08x.", pgd_addr)
-        log.Printf("loader: Created PML4 @ 0x%08x.", pml4_addr)
+        log.Printf("loader: Created PDE @ %08x.", pde_addr)
+        log.Printf("loader: Created PGD @ %08x.", pgd_addr)
+        log.Printf("loader: Created PML4 @ %08x.", pml4_addr)
 
         // Set our newly build page table.
         err = vcpu.SetControlRegister(
@@ -352,20 +344,18 @@ func SetupLinux(
     }
 
     // Create our boot parameters.
-    boot_params_data, boot_params_addr, err := model.Allocate(
-        machine.User,
-        "boot params",
+    boot_addr, boot_data, err := model.Allocate(
         0,                 // Start.
-        platform.PageSize, // Alignment.
         model.Max(),       // End.
-        platform.PageSize) // Size.
+        platform.PageSize, // Size.
+        false)             // From bottom.
     if err != nil {
         return err
     }
     err = SetupLinuxBootParams(
         model,
-        boot_params_data,
-        orig_boot_params_data,
+        boot_data,
+        orig_boot_data,
         cmdline_addr,
         initrd_addr,
         initrd_len)
@@ -375,8 +365,8 @@ func SetupLinux(
 
     // Set our registers.
     // This is according to the Linux 32-bit boot protocol.
-    log.Printf("loader: Set boot_params to 0x%08x.", boot_params_addr)
-    err = vcpu.SetRegister(platform.RSI, platform.RegisterValue(boot_params_addr))
+    log.Printf("loader: boot_params @ %08x.", boot_addr)
+    err = vcpu.SetRegister(platform.RSI, platform.RegisterValue(boot_addr))
     if err != nil {
         return err
     }

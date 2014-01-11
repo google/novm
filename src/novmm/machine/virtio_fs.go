@@ -1,26 +1,21 @@
 package machine
 
-func LoadVirtioMmioFs(
-    model *Model,
-    info *DeviceInfo) error {
+type VirtioFsDevice struct {
+    *VirtioDevice
 
-    _, err := LoadMmioVirtioDevice(
-        model,
-        info,
-        VirtioType9p)
+    // The read mappings.
+    Read map[string]string
 
-    return err
+    // The write mappings.
+    Write map[string]string
 }
 
-func LoadVirtioPciFs(
-    model *Model,
-    info *DeviceInfo) error {
+func NewVirtioMmioFs(info *DeviceInfo) (Device, error) {
+    device, err := NewMmioVirtioDevice(info, VirtioType9p)
+    return &VirtioFsDevice{VirtioDevice: device}, err
+}
 
-    _, err := LoadPciVirtioDevice(
-        model,
-        info,
-        PciClassMisc,
-        VirtioType9p)
-
-    return err
+func NewVirtioPciFs(info *DeviceInfo) (Device, error) {
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p)
+    return &VirtioFsDevice{VirtioDevice: device}, err
 }

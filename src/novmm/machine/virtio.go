@@ -1,7 +1,7 @@
 package machine
 
 import (
-    "novmm/platform"
+    "math"
 )
 
 //
@@ -47,14 +47,10 @@ type VirtioChannels chan []byte
 // details away from the actual device logic.
 //
 type VirtioDevice struct {
+    Device
+
+    // Our device channels.
     channels VirtioChannels
-
-    // Our I/O base (if not PCI).
-    IoBase platform.Paddr
-    IoSize uint64
-
-    // Our assigned interrupt (may be configured via PCI).
-    Interrupt int
 }
 
 //
@@ -92,7 +88,7 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
     case VirtioOffsetQueueVec:
     }
 
-    return 0, VirtioInvalidRegister
+    return math.MaxUint64, nil
 }
 
 func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
@@ -110,12 +106,11 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
     case VirtioOffsetQueueVec:
     }
 
-    return VirtioInvalidRegister
+    return nil
 }
 
-func NewVirtioDevice() *VirtioDevice {
-
-    virtio := new(VirtioDevice)
+func NewVirtioDevice(device Device) *VirtioDevice {
+    virtio := &VirtioDevice{Device: device}
     virtio.channels = make(VirtioChannels, 1024)
     return virtio
 }
@@ -125,38 +120,14 @@ func NewVirtioDevice() *VirtioDevice {
 //
 const VirtioPciVendor = 0x1af4
 
-func LoadPciVirtioDevice(
-    model *Model,
+func NewPciVirtioDevice(
     info *DeviceInfo,
     class PciClass,
-    subsystem_id uint16) (VirtioChannels, error) {
-
-    virtio := NewVirtioDevice()
-    info.Load(virtio)
-
-    // Find our pcibus.
-    var ok bool
-    var pcibus *PciBus
-    for _, device := range model.Devices() {
-        pcibus, ok = device.info.Data.(*PciBus)
-        if pcibus != nil && ok {
-            break
-        }
-    }
-    if pcibus == nil {
-        return nil, VirtioPciNotFound
-    }
+    subsystem_id uint16) (*VirtioDevice, error) {
 
     // Allocate our pci device.
-    // NOTE: In this case, we don't actually add
-    // anything to the model itself. The PciBus will
-    // enumerate this device, and that's it.
-
-    _, err := pcibus.NewDevice(
+    device, err := NewPciDevice(
         info,
-        IoMap{
-            MemoryRegion{0x0, 0x100}: &VirtioConf{virtio},
-        },
         PciVendorId(VirtioPciVendor),
         PciDeviceId(0x1000+subsystem_id),
         class,
@@ -168,7 +139,14 @@ func LoadPciVirtioDevice(
         return nil, err
     }
 
-    return virtio.channels, err
+    virtio := NewVirtioDevice(device)
+
+    // Set our I/O region.
+    device.MmioDevice.IoMap = IoMap{
+        MemoryRegion{0, 0xd0}: &VirtioConf{virtio},
+    }
+
+    return virtio, device.Init(info)
 }
 
 type VirtioMmioConf struct {
@@ -192,58 +170,37 @@ func (reg *VirtioMmioConf) Read(offset uint64, size uint) (uint64, error) {
         return VirtioPciVendor, nil
     }
 
-    return 0, VirtioInvalidRegister
+    return math.MaxUint64, nil
 }
 
 func (reg *VirtioMmioConf) Write(offset uint64, size uint, value uint64) error {
-    return VirtioInvalidRegister
+    return nil
 }
 
-func LoadMmioVirtioDevice(
-    model *Model,
+type VirtioMmioDevice struct {
+    MmioDevice
+
+    // Our assigned interrupt (may be configured via PCI).
+    Interrupt int `json:"interrupt"`
+}
+
+func NewMmioVirtioDevice(
     info *DeviceInfo,
-    class int) (VirtioChannels, error) {
+    class int) (*VirtioDevice, error) {
+
+    // Create our Mmio device.
+    device := &VirtioMmioDevice{}
 
     // Create our new device.
-    virtio := NewVirtioDevice()
-    info.Load(virtio)
+    virtio := NewVirtioDevice(device)
 
-    // Find available memory.
-    _, addr, err := model.Allocate(
-        Reserved,
-        info.Name,
-        0,
-        0x100,
-        model.Max(),
-        platform.PageSize)
-    if err != nil {
-        return nil, err
+    // Set our I/O regions.
+    device.MmioDevice.IoMap = IoMap{
+        // Carve our special ports for our device info.
+        MemoryRegion{0, 0x10}: &VirtioMmioConf{class},
+        // The rest will be standard virtio control registers.
+        MemoryRegion{0x10, 0xe0}: &VirtioConf{virtio},
     }
 
-    // Initialize static parameters.
-    virtio.IoBase = addr
-    virtio.IoSize = 0x100
-    virtio.Interrupt = model.AllocateInterrupt()
-
-    // Allocate our real device.
-    device, err := NewDevice(
-        info,
-        IoMap{}, // No port-I/O.
-        0,
-        IoMap{
-            // Carve our special ports for our device info.
-            MemoryRegion{0, 0x10}: &VirtioMmioConf{class},
-            // The rest will be standard virtio control registers.
-            MemoryRegion{0x10, 0xe0}: &VirtioConf{virtio},
-        },
-        uint64(addr), // Our offset.
-    )
-    if err != nil {
-        return nil, err
-    }
-
-    // Add it to the model.
-    err = model.AddDevice(device)
-
-    return virtio.channels, err
+    return virtio, device.Init(info)
 }

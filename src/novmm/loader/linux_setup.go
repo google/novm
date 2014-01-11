@@ -85,12 +85,6 @@ func SetupLinuxBootParams(
         unsafe.Pointer(&orig_boot_params_data[setup_start]),
         C.size_t(setup_end-setup_start))
 
-    // Load our regions (for e820 info below).
-    regions, err := model.Regions()
-    if err != nil {
-        return err
-    }
-
     // Setup our BIOS memory map.
     // NOTE: We have to do this via C bindings. This is really
     // annoying, but basically because of the unaligned structures
@@ -98,18 +92,20 @@ func SetupLinuxBootParams(
     // actually *incompatible* with the actual C layout.
 
     // First, the count.
-    C.e820_set_count(boot_params, C.int(len(regions)))
+    C.e820_set_count(boot_params, C.int(len(model.MemoryMap)))
 
     // Then, fill out the region information.
-    for index, region := range regions {
+    for index, region := range model.MemoryMap {
 
         var memtype C.int
-        switch region.Type {
-        case machine.User:
+        switch region.MemoryType {
+        case machine.MemoryTypeUser:
             memtype = C.E820Ram
-        case machine.Reserved:
+        case machine.MemoryTypeReserved:
             memtype = C.E820Reserved
-        case machine.Acpi:
+        case machine.MemoryTypeSpecial:
+            memtype = C.E820Reserved
+        case machine.MemoryTypeAcpi:
             memtype = C.E820Acpi
         }
 

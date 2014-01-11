@@ -117,7 +117,7 @@ func (sysmap *LinuxSystemMap) Lookup(
 }
 
 func LoadLinux(
-    vcpu platform.Vcpu,
+    vcpu *platform.Vcpu,
     model *machine.Model,
     boot_params string,
     vmlinux string,
@@ -171,7 +171,7 @@ func LoadLinux(
     } else {
         log.Print("loader: 32-bit kernel found.")
     }
-    log.Printf("loader: Entry point is 0x%08x.", entry_point)
+    log.Printf("loader: Entry point is %08x.", entry_point)
 
     // Set our calling convention.
     var convention *Convention
@@ -182,45 +182,42 @@ func LoadLinux(
     }
 
     // Load the cmdline.
-    // NOTE: Unlike the other elements, this is not
-    // loaded (i.e. it is not mapped directly into the VM),
-    // because it probably doesn't represent a page-aligned
-    // mmap region. So we do a manual allocation and copy it.
-    cmdline_data, cmdline_addr, err := model.Allocate(
-        machine.User,
-        "cmdline",
-        0,                 // Start.
-        platform.PageSize, // Size.
-        model.Max(),       // End.
-        platform.PageSize) // Alignment.
+    // NOTE: Here we create a full page with
+    // trailing zeros. This is the expected form
+    // for the command line.
+    full_cmdline := make(
+        []byte,
+        platform.PageSize,
+        platform.PageSize)
+    copy(full_cmdline, []byte(cmdline))
+
+    cmdline_addr, err := model.Load(
+        platform.Paddr(0),
+        model.Max(),
+        full_cmdline,
+        false)
     if err != nil {
         return nil, nil, err
     }
-    for i := 0; i < len(cmdline_data); i += 1 {
-        if i >= len(cmdline) {
-            cmdline_data[i] = 0
-        } else {
-            cmdline_data[i] = cmdline[i]
-        }
-    }
-    log.Printf("loader: Address for cmdline is 0x%08x.", cmdline_addr)
+
+    log.Printf("loader: cmdline @ %08x: %s",
+        cmdline_addr,
+        cmdline)
 
     // Load the initrd.
-    log.Print("loader: Loading ramdisk and command line...")
     initrd_addr, err := model.Load(
-        machine.User,
-        "ramdisk",
-        platform.Paddr(64*1024*1024),
+        platform.Paddr(0),
+        model.Max(),
         initrd_data,
-        platform.PageSize)
+        true)
     if err != nil {
         return nil, nil, err
     }
-    log.Printf("loader: Address for initrd is 0x%08x.", initrd_addr)
+    log.Printf("loader: initrd @ %08x.", initrd_addr)
 
     // Create our setup page,
     // and initialize the VCPU.
-    SetupLinux(
+    err = SetupLinux(
         vcpu,
         model,
         boot_params_data,
@@ -231,5 +228,5 @@ func LoadLinux(
         cmdline_addr)
 
     // Everything is okay.
-    return sysmap, convention, nil
+    return sysmap, convention, err
 }

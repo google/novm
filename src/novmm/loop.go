@@ -8,7 +8,7 @@ import (
 )
 
 func Loop(
-    vcpu platform.Vcpu,
+    vcpu *platform.Vcpu,
     model *machine.Model,
     step bool,
     tracer *loader.Tracer) error {

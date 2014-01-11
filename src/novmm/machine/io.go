@@ -2,7 +2,7 @@ package machine
 
 import (
     "log"
-    "math"
+    "novmm/platform"
 )
 
 //
@@ -69,105 +69,29 @@ func (queue IoQueue) Submit(event IoEvent, offset uint64) error {
 // represent a single port for a single device.
 
 type IoHandler struct {
-    MemoryRegion
+    Device
 
-    info       *DeviceInfo
+    start      platform.Paddr
     operations IoOperations
     queue      IoQueue
 }
 
 func NewIoHandler(
-    info *DeviceInfo,
-    region MemoryRegion,
+    device Device,
+    start platform.Paddr,
     operations IoOperations) *IoHandler {
 
     io := &IoHandler{
-        MemoryRegion: region,
-        info:         info,
-        operations:   operations,
-        queue:        make(IoQueue),
+        Device:     device,
+        start:      start,
+        operations: operations,
+        queue:      make(IoQueue),
     }
 
     // Start the handler.
     go io.Run()
 
     return io
-}
-
-type Register struct {
-    value uint64
-
-    // Read-only bits?
-    readonly uint64
-
-    // Clear these bits on read.
-    readclr uint64
-}
-
-func (register *Register) Read(offset uint64, size uint) (uint64, error) {
-    var mask uint64
-
-    switch size {
-    case 1:
-        mask = 0x000000ff
-    case 2:
-        mask = 0x0000ffff
-    case 3:
-        mask = 0x00ffffff
-    case 4:
-        mask = 0xffffffff
-    }
-
-    value := uint64(math.MaxUint64)
-
-    switch offset {
-    case 0:
-        value = (register.value) & mask
-    case 1:
-        value = (register.value >> 8) & mask
-        mask = mask << 8
-    case 2:
-        value = (register.value >> 16) & mask
-        mask = mask << 16
-    case 3:
-        value = (register.value >> 24) & mask
-        mask = mask << 24
-    }
-
-    register.value = register.value & ^(mask & register.readclr)
-    return value, nil
-}
-
-func (register *Register) Write(offset uint64, size uint, value uint64) error {
-    var mask uint64
-
-    switch size {
-    case 1:
-        mask = 0x000000ff & register.readonly
-    case 2:
-        mask = 0x0000ffff & register.readonly
-    case 3:
-        mask = 0x00ffffff & register.readonly
-    case 4:
-        mask = 0xffffffff & register.readonly
-    }
-
-    value = value & mask
-
-    switch offset {
-    case 1:
-        mask = mask << 8
-        value = value << 8
-    case 2:
-        mask = mask << 16
-        value = value << 16
-    case 3:
-        mask = mask << 24
-        value = value << 24
-    }
-
-    register.value = (register.value & ^mask) | (value & mask)
-    return nil
 }
 
 func (io *IoHandler) Run() {
@@ -177,34 +101,22 @@ func (io *IoHandler) Run() {
         req := <-io.queue
         size := req.event.Size()
 
-        // Limit the size.
-        if req.offset+uint64(size) >= io.MemoryRegion.Size {
-            size = uint(io.MemoryRegion.Size - req.offset)
-        }
-
         // Perform the operation.
         if req.event.IsWrite() {
             val := req.event.GetData()
-            err := io.operations.Write(
-                req.offset,
-                req.event.Size(),
-                val)
-
+            err := io.operations.Write(req.offset, size, val)
             req.result <- err
 
             // Debug?
-            if io.info.Debug {
-                log.Printf("%s: write %x @ %x+%x",
-                    io.info.Name,
+            if io.IsDebugging() {
+                log.Printf("%s: write %x @+%x",
+                    io.Name(),
                     val,
-                    io.MemoryRegion.Start,
                     req.offset)
             }
 
         } else {
-            val, err := io.operations.Read(
-                req.offset,
-                req.event.Size())
+            val, err := io.operations.Read(req.offset, size)
             if err == nil {
                 req.event.SetData(val)
             }
@@ -212,11 +124,10 @@ func (io *IoHandler) Run() {
             req.result <- err
 
             // Debug?
-            if io.info.Debug {
-                log.Printf("%s: read %x @ %x+%x",
-                    io.info.Name,
+            if io.IsDebugging() {
+                log.Printf("%s: read %x @+%x",
+                    io.Name(),
                     val,
-                    io.MemoryRegion.Start,
                     req.offset)
             }
         }

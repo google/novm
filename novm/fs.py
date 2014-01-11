@@ -6,6 +6,8 @@ from . import virtio
 
 class FS(virtio.Device):
 
+    virtio_driver = "fs"
+
     def __init__(
             self,
             pack=None,
@@ -56,15 +58,6 @@ class FS(virtio.Device):
 
         # Open the device.
         self._file = open(filename, 'w+b')
-
-    def device(self):
-        return super(Disk, self)._device(
-            driver="fs",
-            data={
-                "device": self._info["device"],
-                "fd": self._file.fileno(),
-            }
-        )
 
     def info(self):
         return self._info

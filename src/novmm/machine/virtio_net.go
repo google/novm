@@ -1,26 +1,21 @@
 package machine
 
-func LoadVirtioMmioNet(
-    model *Model,
-    info *DeviceInfo) error {
+type VirtioNetDevice struct {
+    *VirtioDevice
 
-    _, err := LoadMmioVirtioDevice(
-        model,
-        info,
-        VirtioTypeNet)
+    // The tap device file descriptor.
+    Fd  int `json:"fd"`
 
-    return err
+    // The mac address.
+    Mac string `json:"mac"`
 }
 
-func LoadVirtioPciNet(
-    model *Model,
-    info *DeviceInfo) error {
+func NewVirtioMmioNet(info *DeviceInfo) (Device, error) {
+    device, err := NewMmioVirtioDevice(info, VirtioTypeNet)
+    return &VirtioNetDevice{VirtioDevice: device}, err
+}
 
-    _, err := LoadPciVirtioDevice(
-        model,
-        info,
-        PciClassNetwork,
-        VirtioTypeNet)
-
-    return err
+func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
+    device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet)
+    return &VirtioNetDevice{VirtioDevice: device}, err
 }

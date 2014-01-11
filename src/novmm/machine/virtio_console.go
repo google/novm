@@ -1,26 +1,18 @@
 package machine
 
-func LoadVirtioMmioConsole(
-    model *Model,
-    info *DeviceInfo) error {
+type VirtioConsoleDevice struct {
+    *VirtioDevice
 
-    _, err := LoadMmioVirtioDevice(
-        model,
-        info,
-        VirtioTypeConsole)
-
-    return err
+    // The backing server fd.
+    Fd  int `json:"fd"`
 }
 
-func LoadVirtioPciConsole(
-    model *Model,
-    info *DeviceInfo) error {
+func NewVirtioMmioConsole(info *DeviceInfo) (Device, error) {
+    device, err := NewMmioVirtioDevice(info, VirtioTypeConsole)
+    return &VirtioConsoleDevice{VirtioDevice: device}, err
+}
 
-    _, err := LoadPciVirtioDevice(
-        model,
-        info,
-        PciClassMisc,
-        VirtioTypeConsole)
-
-    return err
+func NewVirtioPciConsole(info *DeviceInfo) (Device, error) {
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioTypeConsole)
+    return &VirtioConsoleDevice{VirtioDevice: device}, err
 }

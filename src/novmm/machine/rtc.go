@@ -2,6 +2,7 @@ package machine
 
 import (
     "math"
+    "novmm/platform"
     "time"
 )
 
@@ -47,17 +48,19 @@ const (
 //
 
 type Rtc struct {
+    PioDevice
+
+    // The time.
+    Now  time.Time `json:"now"`
     last time.Time
-    now  time.Time
 
-    addr uint8
-
-    alarmSecond uint8
-    alarmMinute uint8
-    alarmHour   uint8
-
-    statusA uint8
-    statusB uint8
+    // Registers.
+    Addr        uint8 `json:"selector"`
+    AlarmSecond uint8 `json:"alarm-second"`
+    AlarmMinute uint8 `json:"alarm-minute"`
+    AlarmHour   uint8 `json:"alarm-hour"`
+    StatusA     uint8 `json:"statusa"`
+    StatusB     uint8 `json:"statusb"`
 }
 
 type RtcAddr struct {
@@ -73,7 +76,7 @@ func (rtc *Rtc) Update(alive bool) {
     wall_clock := time.Now()
 
     if alive {
-        rtc.now = rtc.now.Add(wall_clock.Sub(rtc.last))
+        rtc.Now = rtc.Now.Add(wall_clock.Sub(rtc.last))
     }
 
     rtc.last = wall_clock
@@ -93,7 +96,7 @@ var Bin2Bcd = []uint8{
 }
 
 func (rtc *Rtc) Val(data int) uint64 {
-    if rtc.statusB&RtcStatusBBIN != 0 {
+    if rtc.StatusB&RtcStatusBBIN != 0 {
         return uint64(uint8(data))
     }
 
@@ -101,65 +104,65 @@ func (rtc *Rtc) Val(data int) uint64 {
 }
 
 func (reg *RtcAddr) Read(offset uint64, size uint) (uint64, error) {
-    return uint64(reg.Rtc.addr), nil
+    return uint64(reg.Rtc.Addr), nil
 }
 
 func (reg *RtcAddr) Write(offset uint64, size uint, value uint64) error {
-    reg.Rtc.addr = uint8(value)
+    reg.Rtc.Addr = uint8(value)
     return nil
 }
 
 func (reg *RtcData) Read(offset uint64, size uint) (uint64, error) {
 
     // Tick.
-    reg.Rtc.Update(reg.Rtc.statusB&RtcStatusBHALT != 0)
+    reg.Rtc.Update(reg.Rtc.StatusB&RtcStatusBHALT != 0)
 
-    switch reg.Rtc.addr {
+    switch reg.Rtc.Addr {
     case RtcSecondAlarm:
-        return uint64(reg.Rtc.alarmSecond), nil
+        return uint64(reg.Rtc.AlarmSecond), nil
 
     case RtcMinuteAlarm:
-        return uint64(reg.Rtc.alarmMinute), nil
+        return uint64(reg.Rtc.AlarmMinute), nil
 
     case RtcHourAlarm:
-        return uint64(reg.Rtc.alarmHour), nil
+        return uint64(reg.Rtc.AlarmHour), nil
 
     case RtcSecond:
-        return reg.Rtc.Val(reg.Rtc.now.Second()), nil
+        return reg.Rtc.Val(reg.Rtc.Now.Second()), nil
 
     case RtcMinute:
-        return reg.Rtc.Val(reg.Rtc.now.Minute()), nil
+        return reg.Rtc.Val(reg.Rtc.Now.Minute()), nil
 
     case RtcHour:
-        if reg.Rtc.statusB&RtcStatusB24HR != 0 {
-            return reg.Rtc.Val(reg.Rtc.now.Hour()), nil
+        if reg.Rtc.StatusB&RtcStatusB24HR != 0 {
+            return reg.Rtc.Val(reg.Rtc.Now.Hour()), nil
         }
 
         // Top bit must be set in 12-hour format.
         // This is such a frustrating way to represent time.
-        hour := reg.Rtc.Val(reg.Rtc.now.Hour() % 12)
-        if reg.Rtc.now.Hour() >= 12 {
+        hour := reg.Rtc.Val(reg.Rtc.Now.Hour() % 12)
+        if reg.Rtc.Now.Hour() >= 12 {
             return 0x80 | hour, nil
         }
         return hour, nil
 
     case RtcWeekday:
-        return reg.Rtc.Val(int(reg.now.Weekday())), nil
+        return reg.Rtc.Val(int(reg.Now.Weekday())), nil
 
     case RtcDay:
-        return reg.Rtc.Val(reg.now.Day()), nil
+        return reg.Rtc.Val(reg.Now.Day()), nil
 
     case RtcMonth:
-        return reg.Rtc.Val(int(reg.now.Month())), nil
+        return reg.Rtc.Val(int(reg.Now.Month())), nil
 
     case RtcYear:
-        return reg.Rtc.Val(reg.now.Year()), nil
+        return reg.Rtc.Val(reg.Now.Year()), nil
 
     case RtcStatusA:
-        return uint64(reg.Rtc.statusA), nil
+        return uint64(reg.Rtc.StatusA), nil
 
     case RtcStatusB:
-        return uint64(reg.Rtc.statusB), nil
+        return uint64(reg.Rtc.StatusB), nil
 
     case RtcIntr:
         return 0, nil
@@ -175,14 +178,14 @@ func (reg *RtcData) Write(offset uint64, size uint, value uint64) error {
 
     val := uint8(value)
 
-    switch reg.Rtc.addr {
+    switch reg.Rtc.Addr {
 
     case RtcStatusA:
-        reg.Rtc.statusA = val & ^uint8(RtcStatusATUP)
+        reg.Rtc.StatusA = val & ^uint8(RtcStatusATUP)
         break
 
     case RtcStatusB:
-        reg.Rtc.statusB = val
+        reg.Rtc.StatusB = val
         break
 
     case RtcIntr:
@@ -194,51 +197,44 @@ func (reg *RtcData) Write(offset uint64, size uint, value uint64) error {
         break
 
     case RtcSecondAlarm:
-        reg.Rtc.alarmSecond = val
+        reg.Rtc.AlarmSecond = val
         break
 
     case RtcMinuteAlarm:
-        reg.Rtc.alarmMinute = val
+        reg.Rtc.AlarmMinute = val
         break
 
     case RtcHourAlarm:
-        reg.Rtc.alarmHour = val
+        reg.Rtc.AlarmHour = val
         break
     }
 
     return nil
 }
 
-func NewRtc(info *DeviceInfo) (*Rtc, *Device, error) {
+func NewRtc(info *DeviceInfo) (Device, error) {
 
     // Create the rtc.
     rtc := new(Rtc)
-    rtc.Update(true)
-    info.Load(rtc)
-
-    // Create the device.
-    device, err := NewDevice(
-        info,
-        IoMap{
-            // Our configuration ports.
-            MemoryRegion{0x70, 1}: &RtcAddr{rtc},
-            MemoryRegion{0x71, 1}: &RtcData{rtc},
-        },
-        0,  // Port-I/O offset.
-        IoMap{},
-        0,  // Memory-I/O offset.
-    )
-
-    // Return our bus and device.
-    return rtc, device, err
-}
-
-func LoadRtc(model *Model, info *DeviceInfo) error {
-
-    _, device, err := NewRtc(info)
-    if err != nil {
-        return err
+    rtc.PioDevice.Offset = 0x70
+    rtc.PioDevice.IoMap = IoMap{
+        // Our configuration ports.
+        MemoryRegion{0, 1}: &RtcAddr{rtc},
+        MemoryRegion{1, 1}: &RtcData{rtc},
     }
 
-    return model.AddDevice(device)
+    return rtc, rtc.Init(info)
+}
+
+func (rtc *Rtc) Attach(vm *platform.Vm, model *Model) error {
+
+    // Update the time.
+    var defaultTime time.Time
+    if rtc.Now != defaultTime {
+        rtc.Update(false)
+    } else {
+        rtc.Update(true)
+    }
+
+    return rtc.PioDevice.Attach(vm, model)
 }
