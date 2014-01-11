@@ -51,6 +51,12 @@ def cleanup(fcn=None, *args, **kwargs):
             if fcn is None:
                 return
 
+            # Let's close off the terminal.
+            null = open("/dev/null", "w+")
+            os.dup2(null.fileno(), 0)
+            os.dup2(null.fileno(), 1)
+            os.dup2(null.fileno(), 2)
+
             # Wait for the exit.
             while True:
                 signal.pause()
