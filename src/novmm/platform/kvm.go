@@ -73,6 +73,7 @@ static void cpuid_finish(void *data) {
             asm volatile("cpuid"
                 :"=a"(eax),"=b"(ebx),"=c"(ecx),"=d"(edx)
                 :"a"(eax));
+            // Copy our vendor.
             cpuid->entries[n].ecx = ecx;
             cpuid->entries[n].ebx = ebx;
             cpuid->entries[n].edx = edx;
@@ -82,8 +83,10 @@ static void cpuid_finish(void *data) {
             asm volatile("cpuid"
                 :"=a"(eax),"=b"(ebx),"=c"(ecx),"=d"(edx)
                 :"a"(eax));
+            // Copy our cpu model.
             cpuid->entries[n].eax = eax;
-            cpuid->entries[n].eax = eax;
+            // Note that we have an APIC.
+            cpuid->entries[n].edx |= (1<<9);
         }
     }
 }

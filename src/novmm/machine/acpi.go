@@ -68,11 +68,25 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         offset += 64 - (offset % 64)
     }
 
+    // Load the DSDT.
+    dsdt_address := uint64(acpi.Addr) + uint64(offset)
+    dsdt_bytes := C.build_dsdt(
+        unsafe.Pointer(&acpi.Data[int(offset)]),
+    )
+    log.Printf("acpi: DSDT %x @ %x", dsdt_bytes, dsdt_address)
+
+    // Align offset.
+    offset += dsdt_bytes
+    if offset%64 != 0 {
+        offset += 64 - (offset % 64)
+    }
+
     // Load the XSDT.
     xsdt_address := uint64(acpi.Addr) + uint64(offset)
     xsdt_bytes := C.build_xsdt(
         unsafe.Pointer(&acpi.Data[int(offset)]),
-        C.__u64(acpi.Addr), // MADT address.
+        C.__u64(dsdt_address), // DSDT address.
+        C.__u64(acpi.Addr),    // MADT address.
     )
     log.Printf("acpi: XSDT %x @ %x", xsdt_bytes, xsdt_address)
 
@@ -86,7 +100,8 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
     rsdt_address := uint64(acpi.Addr) + uint64(offset)
     rsdt_bytes := C.build_rsdt(
         unsafe.Pointer(&acpi.Data[int(offset)]),
-        C.__u32(acpi.Addr), // MADT address.
+        C.__u32(dsdt_address), // DSDT address.
+        C.__u32(acpi.Addr),    // MADT address.
     )
     log.Printf("acpi: RSDT %x @ %x", rsdt_bytes, rsdt_address)
 

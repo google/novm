@@ -69,11 +69,13 @@ typedef struct acpi_header {
 
 typedef struct rsdt {
     acpi_header_t header;
+    __u32 dsdt_address;
     __u32 madt_address;
 } __attribute__((packed)) rsdt_t;
 
 long build_rsdt(
     void* start,
+    __u32 dsdt_address,
     __u32 madt_address)
 {
     rsdt_t* rsdt = (rsdt_t*)start;
@@ -87,6 +89,7 @@ long build_rsdt(
     memcpy(rsdt->header.asl_compiler_id, "NOVM", 4);
     rsdt->header.asl_compiler_rev = 0;
 
+    rsdt->dsdt_address = dsdt_address;
     rsdt->madt_address = madt_address;
     rsdt->header.checksum = checksum(start, rsdt->header.length);
 
@@ -95,11 +98,13 @@ long build_rsdt(
 
 typedef struct xsdt {
     acpi_header_t header;
+    __u64 dsdt_address;
     __u64 madt_address;
 } __attribute__((packed)) xsdt_t;
 
 long build_xsdt(
     void* start,
+    __u64 dsdt_address,
     __u64 madt_address)
 {
     xsdt_t* xsdt = (xsdt_t*)start;
@@ -113,6 +118,7 @@ long build_xsdt(
     memcpy(xsdt->header.asl_compiler_id, "NOVM", 4);
     xsdt->header.asl_compiler_rev = 0;
 
+    xsdt->dsdt_address = dsdt_address;
     xsdt->madt_address = madt_address;
     xsdt->header.checksum = checksum(start, xsdt->header.length);
 
@@ -171,6 +177,28 @@ long build_madt_device_ioapic(
     ioapic->interrupt = interrupt;
 
     return ioapic->device.length;
+}
+
+typedef struct dsdt {
+    acpi_header_t header;
+} dsdt_t;
+
+long build_dsdt(
+    void* start) {
+
+    dsdt_t* dsdt = (dsdt_t*)start;
+
+    memcpy(dsdt->header.signature, "DSDT", 4);
+    dsdt->header.revision = 1;
+    memcpy(dsdt->header.oem_id, "PERVIR", 6);
+    memcpy(dsdt->header.oem_table_id, "DSDT", 4);
+    dsdt->header.oem_revision = 0;
+    memcpy(dsdt->header.asl_compiler_id, "NOVM", 4);
+    dsdt->header.asl_compiler_rev = 0;
+
+    dsdt->header.length = sizeof(dsdt_t);
+    dsdt->header.checksum = checksum(start, dsdt->header.length);
+    return dsdt->header.length;
 }
 
 typedef struct madt {
