@@ -109,10 +109,10 @@ func (io *IoHandler) Run() {
 
             // Debug?
             if io.IsDebugging() {
-                log.Printf("%s: write %x @+%x",
+                log.Printf("%s: write %x @ %x",
                     io.Name(),
                     val,
-                    req.offset)
+                    io.start.After(req.offset))
             }
 
         } else {
@@ -125,10 +125,10 @@ func (io *IoHandler) Run() {
 
             // Debug?
             if io.IsDebugging() {
-                log.Printf("%s: read %x @+%x",
+                log.Printf("%s: read %x @ %x",
                     io.Name(),
                     val,
-                    req.offset)
+                    io.start.After(req.offset))
             }
         }
     }
