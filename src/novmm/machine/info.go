@@ -33,23 +33,25 @@ func (info DeviceInfo) Load() (Device, error) {
         return nil, err
     }
 
-    // Scratch data.
-    buffer := bytes.NewBuffer(nil)
+    if info.Data != nil {
+        // Scratch data.
+        buffer := bytes.NewBuffer(nil)
 
-    // Encode the original object.
-    json_encoder := json.NewEncoder(buffer)
-    err = json_encoder.Encode(info.Data)
-    if err != nil {
-        return nil, err
-    }
+        // Encode the original object.
+        json_encoder := json.NewEncoder(buffer)
+        err = json_encoder.Encode(info.Data)
+        if err != nil {
+            return nil, err
+        }
 
-    // Decode a new object.
-    // This will override all the default
-    // settings in the initialized object.
-    json_decoder := json.NewDecoder(buffer)
-    err = json_decoder.Decode(device)
-    if err != nil {
-        return nil, err
+        // Decode a new object.
+        // This will override all the default
+        // settings in the initialized object.
+        json_decoder := json.NewDecoder(buffer)
+        err = json_decoder.Decode(device)
+        if err != nil {
+            return nil, err
+        }
     }
 
     // Save the original device.
