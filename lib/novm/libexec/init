@@ -11,6 +11,17 @@ for x in $(cat /proc/cmdline); do
     esac
 done
 
+# Try logging.
+echo "Initial ramdisk running..." > /dev/kmsg
+
+# Load all virt-io modules.
+modprobe virtio-pci
+modprobe virtio-net
+modprobe virtio-block
+modprobe virtio-console
+modprobe 9pnet_virtio
+modprobe 9p
+
 # Execute our noinit process.
 #
 # The first thing this will do is
@@ -19,4 +30,4 @@ done
 # The second thing it will do is open
 # the virtIO console and become an RPC
 # server for the backend. Yeehaw!
-exec /noguest -pivot_root /root
+exec /sysroot/noguest -pivot_root /root

@@ -28,6 +28,7 @@ touch $WDIR/etc/modprobe.d/modprobe.conf
 ln -s lib $WDIR/lib64
 
 # Create necessary device nodes.
+mknod -m 640 $WDIR/dev/kmsg    c 1 11
 mknod -m 640 $WDIR/dev/console c 5 1
 mknod -m 664 $WDIR/dev/null    c 1 3
 
@@ -35,7 +36,7 @@ mknod -m 664 $WDIR/dev/null    c 1 3
 install -m0755 $(dirname $0)/init $WDIR/init
 
 # Copy our files.
-binfiles="sh sleep mount umount mkdir ln"
+binfiles="ls sh sleep mount umount mkdir ln"
 sbinfiles="modprobe switch_root"
 
 if [ -x /bin/kmod ] ; then
@@ -60,18 +61,31 @@ copy()
         file=/$2/$1
     fi
 
+    echo "Copying $file ..." 1>&2
+
     if ! cp $file $WDIR/$2; then
-        echo "Missing required file: $file for directory $2"
+        echo "Missing required file: $file for directory $2" 1>&2
         return 1
     fi
 }
 
+filter_libs()
+{
+    while read line; do
+        if echo $line | grep -q "=>"; then
+            echo $line | sed "s/\t//" | cut -d" " -f3
+        else
+            echo $line | sed "s/\t//" | cut -d" " -f1
+        fi
+    done
+}
+
 for f in $binfiles; do
-    ldd /bin/$f | sed "s/\t//" | cut -d " " -f1 >> $unsorted
+    ldd /bin/$f | filter_libs >> $unsorted
     copy $f bin
 done
 for f in $sbinfiles; do
-    ldd /sbin/$f | sed "s/\t//" | cut -d " " -f1 >> $unsorted
+    ldd /sbin/$f | filter_libs >> $unsorted
     copy $f sbin
 done
 
@@ -87,12 +101,29 @@ done
 # For user convenience, we also include all filesystems,
 # and all crypto modules. They could certainly built this
 # into their image and load it separately, but why not.
+expand_modules()
+{
+    while read module; do
+        # Install this module.
+        echo "Copying module $module ..." 1>&2
+        echo $module
+
+        # Install all dependencies.
+        DEPS=$(grep "$module: " $MOD_PATH/modules.dep | cut -d":" -f2-)
+        for dep in $DEPS; do
+            expand_modules $DEPS
+        done
+    done
+}
 
 find $MOD_PATH \
-    -name virtio_\*.ko \
+    -name virtio.ko \
+    -o -name virtio_\*.ko \
+    -o -name fscache.ko \
     -o -name 9p.ko \
     -o -name 9pnet.ko \
     -o -name 9pnet_virtio.ko \
+    | expand_modules \
     | cpio --make-directories -p --quiet $WDIR
 
 cp $MOD_PATH/modules.{builtin,order} \
