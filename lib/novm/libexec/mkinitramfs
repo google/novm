@@ -61,7 +61,7 @@ copy()
         file=/$2/$1
     fi
 
-    echo "Copying $file ..." 1>&2
+    echo "Copying $1 to $2..." 1>&2
 
     if ! cp $file $WDIR/$2; then
         echo "Missing required file: $file for directory $2" 1>&2
@@ -72,6 +72,10 @@ copy()
 filter_libs()
 {
     while read line; do
+        if echo $line | grep -q "linux-vdso" ||
+           echo $line | grep -q "linux-gate"; then
+            continue
+        fi
         if echo $line | grep -q "=>"; then
             echo $line | sed "s/\t//" | cut -d" " -f3
         else
@@ -90,10 +94,6 @@ for f in $sbinfiles; do
 done
 
 sort $unsorted | uniq | while read library ; do
-    if [ "$library" == "linux-vdso.so.1" ] ||
-       [ "$library" == "linux-gate.so.1" ]; then
-        continue
-    fi
     copy $library lib
 done
 
