@@ -273,7 +273,7 @@ func (pcibus *PciBus) Attach(vm *platform.Vm, model *Model) error {
     pcibus.SelectLast()
 
     // Save the flush function.
-    pcibus.flush = model.flush
+    pcibus.flush = func() error { return model.flush() }
 
     return pcibus.PioDevice.Attach(vm, model)
 }

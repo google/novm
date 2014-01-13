@@ -167,7 +167,7 @@ func (user *UserMemory) Attach(vm *platform.Vm, model *Model) error {
     // Layout remaining amount.
     if size > total {
         return user.Layout(vm, model, max_offset, size-total)
-    } else {
-        return nil
     }
+
+    return nil
 }
