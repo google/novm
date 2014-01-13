@@ -1,0 +1,4 @@
+#!/bin/bash
+
+DIRNAME=$(dirname $0)
+$DIRNAME/novm getkernel --url $($DIRNAME/novm mkkernel)
