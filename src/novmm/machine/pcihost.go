@@ -1,6 +1,6 @@
 package machine
 
-func NewPciHostBridge(info *DeviceInfo) (*PciDevice, error) {
+func NewPciHostBridge(info *DeviceInfo) (Device, error) {
 
     // Create a bus device.
     hostbridge, err := NewPciDevice(

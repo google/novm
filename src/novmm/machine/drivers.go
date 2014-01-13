@@ -11,6 +11,7 @@ var drivers = map[string]Driver{
     "rtc":                 NewRtc,
     "uart":                NewUart,
     "pci-bus":             NewPciBus,
+    "pci-hostbridge":      NewPciHostBridge,
     "user-memory":         NewUserMemory,
     "virtio-pci-block":    NewVirtioPciBlock,
     "virtio-mmio-block":   NewVirtioMmioBlock,

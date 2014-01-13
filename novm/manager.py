@@ -135,6 +135,7 @@ class NovmManager(object):
         # Use a PCI bus?
         if usepci:
             devices.append(pci.PciBus())
+            devices.append(pci.PciHostBridge())
 
         # Build our NICs.
         devices.extend([

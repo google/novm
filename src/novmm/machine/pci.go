@@ -55,6 +55,9 @@ type PciDevice struct {
 type PciBus struct {
     PioDevice
 
+    // Our Mmio Handlers.
+    IoHandlers
+
     // On bus devices.
     devices []*PciDevice
 
@@ -133,7 +136,6 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
     if int(reg.PciBus.Offset) >= len(reg.PciBus.last.config) {
         // Ignore.
         return value, nil
-
     }
 
     // Is it a known register?
