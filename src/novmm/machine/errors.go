@@ -12,6 +12,10 @@ var MemoryBusy = errors.New("Memory could not be allocated!")
 var MemoryUnaligned = errors.New("Memory not aligned!")
 var UserMemoryNotFound = errors.New("No user memory found?")
 
+// Interrupt allocation errors.
+var InterruptConflict = errors.New("Device interrupt conflict!")
+var InterruptUnavailable = errors.New("No interrupt available!")
+
 // PCI errors.
 var PciInvalidAddress = errors.New("Invalid PCI address!")
 var PciBusNotFound = errors.New("Requested PCI devices, but no bus found?")

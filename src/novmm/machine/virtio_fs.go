@@ -11,11 +11,11 @@ type VirtioFsDevice struct {
 }
 
 func NewVirtioMmioFs(info *DeviceInfo) (Device, error) {
-    device, err := NewMmioVirtioDevice(info, VirtioType9p)
+    device, err := NewMmioVirtioDevice(info, []uint{1024, 1024}, VirtioType9p)
     return &VirtioFsDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciFs(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p)
+    device, err := NewPciVirtioDevice(info, []uint{1024, 1024}, PciClassMisc, VirtioType9p)
     return &VirtioFsDevice{VirtioDevice: device}, err
 }

@@ -1,7 +1,9 @@
 package machine
 
 import (
+    "log"
     "math"
+    "novmm/platform"
 )
 
 //
@@ -38,7 +40,7 @@ const (
 // other details are completely left over for the
 // device driver itself.
 //
-type VirtioChannels chan []byte
+type VirtioChannel chan []byte
 
 //
 // We store the common configuration here and run
@@ -50,7 +52,18 @@ type VirtioDevice struct {
     Device
 
     // Our device channels.
-    channels VirtioChannels
+    // There is one set of channel
+    channels []VirtioChannel
+
+    // Our virtio-specific registers.
+    HostFeatures  Register `json:"host-features"`
+    GuestFeatures Register `json:"guest-features"`
+    QueueAddress  Register `json:"queue-address"`
+    QueueSize     Register `json:"queue-size"`
+    QueueSelect   Register `json:"queue-select"`
+    QueueNotify   Register `json:"queue-notify"`
+    DeviceStatus  Register `json:"device-status"`
+    IsrStatus     Register `json:"isr-status"`
 }
 
 //
@@ -77,13 +90,21 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
 
     switch offset {
     case VirtioOffsetHostCap:
+        return reg.HostFeatures.Read(0, size)
     case VirtioOffsetGuestCap:
+        return reg.GuestFeatures.Read(0, size)
     case VirtioOffsetQueuePfn:
+        return reg.QueueAddress.Read(0, size)
     case VirtioOffsetQueueNo:
+        return reg.QueueSize.Read(0, size)
     case VirtioOffsetQueueSel:
+        return reg.QueueSelect.Read(0, size)
     case VirtioOffsetQueueNotify:
+        return reg.QueueNotify.Read(0, size)
     case VirtioOffsetStatus:
+        return reg.DeviceStatus.Read(0, size)
     case VirtioOffsetIsr:
+        return reg.IsrStatus.Read(0, size)
     case VirtioOffsetCfgVec:
     case VirtioOffsetQueueVec:
     }
@@ -95,13 +116,40 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
 
     switch offset {
     case VirtioOffsetHostCap:
+        return reg.HostFeatures.Write(0, size, value)
     case VirtioOffsetGuestCap:
+        return reg.GuestFeatures.Write(0, size, value)
     case VirtioOffsetQueuePfn:
+        return reg.QueueAddress.Write(0, size, value)
     case VirtioOffsetQueueNo:
+        return reg.QueueSize.Write(0, size, value)
     case VirtioOffsetQueueSel:
+        return reg.QueueSelect.Write(0, size, value)
     case VirtioOffsetQueueNotify:
+        return reg.QueueNotify.Write(0, size, value)
     case VirtioOffsetStatus:
+        if value == VirtioStatusReboot {
+            log.Printf("%s: reboot", reg.Device.Name())
+        }
+        if reg.DeviceStatus.Value&VirtioStatusAck == 0 &&
+            value&VirtioStatusAck != 0 {
+            log.Printf("%s: ack", reg.Device.Name())
+        }
+        if reg.DeviceStatus.Value&VirtioStatusDriver == 0 &&
+            value&VirtioStatusAck != 0 {
+            log.Printf("%s: driver", reg.Device.Name())
+        }
+        if reg.DeviceStatus.Value&VirtioStatusDriverOk == 0 &&
+            value&VirtioStatusAck != 0 {
+            log.Printf("%s: driver-ack", reg.Device.Name())
+        }
+        if reg.DeviceStatus.Value&VirtioStatusFailed == 0 &&
+            value&VirtioStatusAck != 0 {
+            log.Printf("%s: failed", reg.Device.Name())
+        }
+        return reg.DeviceStatus.Write(0, size, value)
     case VirtioOffsetIsr:
+        return reg.IsrStatus.Write(0, size, value)
     case VirtioOffsetCfgVec:
     case VirtioOffsetQueueVec:
     }
@@ -109,9 +157,12 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
     return nil
 }
 
-func NewVirtioDevice(device Device) *VirtioDevice {
+func NewVirtioDevice(device Device, channels []uint) *VirtioDevice {
     virtio := &VirtioDevice{Device: device}
-    virtio.channels = make(VirtioChannels, 1024)
+    virtio.channels = make([]VirtioChannel, len(channels), len(channels))
+    for i := 0; i < len(channels); i += 1 {
+        virtio.channels[i] = make(VirtioChannel, channels[i])
+    }
     return virtio
 }
 
@@ -122,6 +173,7 @@ const VirtioPciVendor = 0x1af4
 
 func NewPciVirtioDevice(
     info *DeviceInfo,
+    channels []uint,
     class PciClass,
     subsystem_id uint16) (*VirtioDevice, error) {
 
@@ -139,12 +191,9 @@ func NewPciVirtioDevice(
         return nil, err
     }
 
-    virtio := NewVirtioDevice(device)
-
-    // Set our I/O region.
-    device.MmioDevice.IoMap = IoMap{
-        MemoryRegion{0, 0xd0}: &VirtioConf{virtio},
-    }
+    virtio := NewVirtioDevice(device, channels)
+    device.bars = []uint32{uint32(platform.PageSize)}
+    device.barops = []IoOperations{&VirtioConf{virtio}}
 
     return virtio, device.Init(info)
 }
@@ -186,13 +235,14 @@ type VirtioMmioDevice struct {
 
 func NewMmioVirtioDevice(
     info *DeviceInfo,
+    channels []uint,
     class int) (*VirtioDevice, error) {
 
     // Create our Mmio device.
     device := &VirtioMmioDevice{}
 
     // Create our new device.
-    virtio := NewVirtioDevice(device)
+    virtio := NewVirtioDevice(device, channels)
 
     // Set our I/O regions.
     device.MmioDevice.IoMap = IoMap{

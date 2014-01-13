@@ -37,10 +37,17 @@ const (
 
 type PciDevice struct {
     MmioDevice
+    InterruptDevice
 
     // Packed configuration data.
     // (This encodes the vendor/device, etc.)
     config NvRam
+
+    // Bar sizes.
+    bars []uint32
+
+    // Bar operations.
+    barops []IoOperations
 }
 
 //
@@ -153,9 +160,9 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
     }
 
     // Debugging?
-    if reg.PciBus.last.info.Debug {
+    if reg.PciBus.last.IsDebugging() {
         log.Printf("pci-bus:%s: config read %x @ %x",
-            reg.PciBus.last.info.Name,
+            reg.PciBus.last.Name(),
             value,
             reg.PciBus.Offset)
     }
@@ -171,21 +178,17 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
     }
 
     // Debugging?
-    if reg.PciBus.last.info.Debug {
+    if reg.PciBus.last.IsDebugging() {
         log.Printf("pci-bus:%s: config write %x @ %x",
-            reg.PciBus.last.info.Name,
+            reg.PciBus.last.Name(),
             value,
-            offset)
+            reg.PciBus.Offset)
     }
 
     // Is it greater than our built-in config?
     if int(reg.PciBus.Offset) >= len(reg.PciBus.last.config) {
         // Ignore.
         return nil
-    }
-
-    // Is it a known register?
-    switch reg.PciBus.Offset {
     }
 
     // Handle default.
@@ -196,6 +199,12 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
         reg.PciBus.last.config.Set16(int(reg.PciBus.Offset), uint16(value))
     case 4:
         reg.PciBus.last.config.Set32(int(reg.PciBus.Offset), uint32(value))
+    }
+
+    // Rebuild our BARs?
+    if reg.PciBus.Offset >= 0x10 && reg.PciBus.Offset < 0x28 {
+        reg.PciBus.last.RebuildBars()
+        return reg.PciBus.flush()
     }
 
     return nil
@@ -213,6 +222,8 @@ func NewPciDevice(
     // Create the pci device.
     device := new(PciDevice)
     device.config = make(NvRam, 0x40, 0x40)
+    device.bars = make([]uint32, 0)
+    device.barops = make([]IoOperations, 0)
     device.Init(info)
 
     // Set our configuration space.
@@ -234,20 +245,6 @@ func (pcibus *PciBus) AddDevice(device *PciDevice) error {
 
     // Append it to our list.
     pcibus.devices = append(pcibus.devices, device)
-    return pcibus.Refresh()
-}
-
-func (pcibus *PciBus) Refresh() error {
-
-    // Rebuild our IoHandlers.
-    pcibus.IoHandlers = make(IoHandlers)
-    for _, device := range pcibus.devices {
-        for region, handler := range device.MmioHandlers() {
-            pcibus.IoHandlers[region] = handler
-        }
-    }
-
-    // Reset the model I/O cache.
     return pcibus.flush()
 }
 
@@ -281,6 +278,51 @@ func (pcibus *PciBus) Attach(vm *platform.Vm, model *Model) error {
     return pcibus.PioDevice.Attach(vm, model)
 }
 
+func (pcidevice *PciDevice) RebuildBars() {
+
+    // Build our IO Handlers.
+    pcidevice.IoHandlers = make(IoHandlers)
+    for i := 0; i < 6; i += 1 {
+
+        barreg := 0x10 + (i * 4)
+        baraddr := pcidevice.config.Get32(barreg)
+        if i >= len(pcidevice.bars) {
+            // Not supported?
+            pcidevice.config.Set32(barreg, 0xffffffff)
+            continue
+        }
+
+        // Mask out port-I/O bits.
+        newreg := baraddr & ^(pcidevice.bars[i]-1) | 0xe
+
+        if pcidevice.IsDebugging() {
+            log.Printf("pci-bus:%s: bar %d @ %x -> %x",
+                pcidevice.Name(),
+                i,
+                baraddr,
+                newreg)
+        }
+
+        // Rebuild our register values.
+        if newreg == baraddr {
+            // No change?
+            continue
+        }
+
+        // Save the new value.
+        pcidevice.config.Set32(barreg, newreg)
+
+        // Create a new handler.
+        region := MemoryRegion{
+            platform.Paddr(baraddr & ^uint32(0xf)),
+            uint64(pcidevice.bars[i])}
+        pcidevice.IoHandlers[region] = NewIoHandler(
+            pcidevice,
+            region.Start,
+            pcidevice.barops[i])
+    }
+}
+
 func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
 
     // Find our pcibus.
@@ -295,6 +337,18 @@ func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
     if pcibus == nil {
         return PciBusNotFound
     }
+
+    // Attach our interrupt.
+    // We also set our interrupt line config appropriately.
+    err := pcidevice.InterruptDevice.AttachInterrupt(vm, model)
+    if err != nil {
+        return err
+    }
+
+    // FIXME: Everything uses INTA.
+    pcidevice.config.Set8(0x3c, 0x1)
+
+    // uint8(pcidevice.Interrupt))
 
     // Attach to the PciBus.
     return pcibus.AddDevice(pcidevice)

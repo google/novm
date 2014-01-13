@@ -44,6 +44,9 @@ func NewModel(vm *platform.Vm) (*Model, error) {
     // Setup the memory map.
     model.MemoryMap = make(MemoryMap, 0, 0)
 
+    // Setup the interrupt map.
+    model.InterruptMap = make(InterruptMap)
+
     // Create our devices.
     model.devices = make([]Device, 0, 0)
 
