@@ -131,6 +131,11 @@ def main(args):
         default=False,
         dest="debug",
         help="Show full stack trace on error.")
+    top_parser.add_argument("--plain",
+        action="store_true",
+        default=False,
+        dest="plain",
+        help="Print result as plain text.")
     top_parser.add_argument("--json", 
         action="store_true",
         default=False,
@@ -160,6 +165,8 @@ def main(args):
     # Print the result.
     if top_args.json:
         print json.dumps(result, indent=True)
+    elif top_args.plain:
+        prettyprint.plainprint(result, sys.stdout)
     else:
         prettyprint.prettyprint(result, sys.stdout)
 

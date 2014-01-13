@@ -80,3 +80,19 @@ def prettyprint(value, output):
         # Default object.
         output.write(str(value) + "\n")
         return
+
+def plainprint(value, output):
+
+    if isinstance(value, types.NoneType):
+        # Print nothing.
+        pass
+
+    elif (isinstance(value, types.ListType) or 
+        isinstance(value, types.DictType)):
+        # Print individual values.
+        for subvalue in value:
+            output.write("%s\n" % subvalue)
+
+    else:
+        # Print the single value.
+        output.write("%s\n" % value)
