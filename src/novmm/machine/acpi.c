@@ -69,13 +69,11 @@ typedef struct acpi_header {
 
 typedef struct rsdt {
     acpi_header_t header;
-    __u32 dsdt_address;
     __u32 madt_address;
 } __attribute__((packed)) rsdt_t;
 
 long build_rsdt(
     void* start,
-    __u32 dsdt_address,
     __u32 madt_address)
 {
     rsdt_t* rsdt = (rsdt_t*)start;
@@ -89,7 +87,6 @@ long build_rsdt(
     memcpy(rsdt->header.asl_compiler_id, "NOVM", 4);
     rsdt->header.asl_compiler_rev = 0;
 
-    rsdt->dsdt_address = dsdt_address;
     rsdt->madt_address = madt_address;
     rsdt->header.checksum = checksum(start, rsdt->header.length);
 
@@ -98,13 +95,11 @@ long build_rsdt(
 
 typedef struct xsdt {
     acpi_header_t header;
-    __u64 dsdt_address;
     __u64 madt_address;
 } __attribute__((packed)) xsdt_t;
 
 long build_xsdt(
     void* start,
-    __u64 dsdt_address,
     __u64 madt_address)
 {
     xsdt_t* xsdt = (xsdt_t*)start;
@@ -118,7 +113,6 @@ long build_xsdt(
     memcpy(xsdt->header.asl_compiler_id, "NOVM", 4);
     xsdt->header.asl_compiler_rev = 0;
 
-    xsdt->dsdt_address = dsdt_address;
     xsdt->madt_address = madt_address;
     xsdt->header.checksum = checksum(start, xsdt->header.length);
 
