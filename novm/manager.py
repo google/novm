@@ -61,6 +61,7 @@ class NovmManager(object):
             usepci=cli.BoolOpt("Enable PCI devices?"),
             com1=cli.BoolOpt("Enable COM1 UART?"),
             com2=cli.BoolOpt("Enable COM2 UART?"),
+            cmdline=cli.StrOpt("Extra command line options?"),
             vmmopt=cli.ListOpt("Options to pass to novmm.")):
 
         """ 
@@ -194,11 +195,11 @@ class NovmManager(object):
         ]))
 
         # Construct our cmdline.
-        args.append("-cmdline=%s" % " ".join([
+        args.append("-cmdline=%s %s" % (" ".join([
             dev.cmdline()
             for dev in devices
             if dev.cmdline() is not None
-        ]))
+        ]), cmdline))
 
         # Execute the instance.
         args.append("-devices=%s" % json.dumps([
