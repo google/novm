@@ -53,7 +53,6 @@ const __u16 VirtioDescFIndirect = VRING_DESC_F_INDIRECT;
 import "C"
 
 import (
-    "log"
     "math"
     "novmm/platform"
     "unsafe"
@@ -362,23 +361,23 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
 
     case VirtioOffsetStatus:
         if value == VirtioStatusReboot {
-            log.Printf("%s: reboot", reg.Device.Name())
+            reg.Device.Debug("reboot")
         }
         if reg.DeviceStatus.Value&VirtioStatusAck == 0 &&
             value&VirtioStatusAck != 0 {
-            log.Printf("%s: ack", reg.Device.Name())
+            reg.Device.Debug("ack")
         }
         if reg.DeviceStatus.Value&VirtioStatusDriver == 0 &&
             value&VirtioStatusDriver != 0 {
-            log.Printf("%s: driver", reg.Device.Name())
+            reg.Device.Debug("driver")
         }
         if reg.DeviceStatus.Value&VirtioStatusDriverOk == 0 &&
             value&VirtioStatusDriverOk != 0 {
-            log.Printf("%s: driver-ok", reg.Device.Name())
+            reg.Device.Debug("driver-ok")
         }
         if reg.DeviceStatus.Value&VirtioStatusFailed == 0 &&
             value&VirtioStatusFailed != 0 {
-            log.Printf("%s: failed", reg.Device.Name())
+            reg.Device.Debug("failed")
         }
         return reg.DeviceStatus.Write(0, size, value)
     case VirtioOffsetIsr:

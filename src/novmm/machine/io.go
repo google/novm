@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "novmm/platform"
 )
 
@@ -108,12 +107,10 @@ func (io *IoHandler) Run() {
             req.result <- err
 
             // Debug?
-            if io.IsDebugging() {
-                log.Printf("%s: write %x @ %x",
-                    io.Name(),
-                    val,
-                    io.start.After(req.offset))
-            }
+            io.Debug(
+                "write %x @ %x",
+                val,
+                io.start.After(req.offset))
 
         } else {
             val, err := io.operations.Read(req.offset, size)
@@ -124,12 +121,10 @@ func (io *IoHandler) Run() {
             req.result <- err
 
             // Debug?
-            if io.IsDebugging() {
-                log.Printf("%s: read %x @ %x",
-                    io.Name(),
-                    val,
-                    io.start.After(req.offset))
-            }
+            io.Debug(
+                "read %x @ %x",
+                val,
+                io.start.After(req.offset))
         }
     }
 }

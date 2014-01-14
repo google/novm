@@ -342,7 +342,7 @@ func (vcpu *Vcpu) dumpRegister(name string, reg Register) {
     if err != nil {
         log.Printf("  %s: error?", name, err)
     } else {
-        log.Printf("  %s: 0x%08x", name, value)
+        log.Printf("  %s: %08x", name, value)
     }
 }
 
@@ -438,7 +438,7 @@ func (vcpu *Vcpu) dumpControlRegister(name string, reg ControlRegister) {
     if err != nil {
         log.Printf("  %s: error?", name, err)
     } else {
-        log.Printf("  %s: 0x%08x", name, value)
+        log.Printf("  %s: %08x", name, value)
     }
 }
 
@@ -706,8 +706,8 @@ func (vcpu *Vcpu) dumpSegment(name string, seg Segment) {
         return
     }
 
-    log.Printf("    base: 0x%08x", value.Base)
-    log.Printf("    limit: 0x%08x", value.Limit)
+    log.Printf("    base: %08x", value.Base)
+    log.Printf("    limit: %08x", value.Limit)
     log.Print("    selector: ", value.Selector)
     log.Printf("    type: %x", value.Type)
     log.Print("    present: ", value.Present)
@@ -792,8 +792,8 @@ func (vcpu *Vcpu) dumpDescriptor(name string, desc Descriptor) {
         return
     }
 
-    log.Printf("    base: 0x%08x", value.Base)
-    log.Printf("    limit: 0x%08x", value.Limit)
+    log.Printf("    base: %08x", value.Base)
+    log.Printf("    limit: %08x", value.Limit)
 }
 
 func (vcpu *Vcpu) dumpDescriptors() {
@@ -830,7 +830,7 @@ func (vm *Vm) MapSpecialMemory(addr Paddr) error {
         uintptr(C.SetIdentityMapAddr),
         uintptr(unsafe.Pointer(&addr)))
     if e != 0 {
-        log.Printf("Unable to set identity map to 0x%08x!", addr)
+        log.Printf("Unable to set identity map to %08x!", addr)
         return e
     }
 
@@ -848,7 +848,7 @@ func (vm *Vm) MapSpecialMemory(addr Paddr) error {
         uintptr(C.SetTssAddr),
         uintptr(addr+PageSize))
     if e != 0 {
-        log.Printf("Unable to set TSS ADDR to 0x%08x!", addr+PageSize)
+        log.Printf("Unable to set TSS ADDR to %08x!", addr+PageSize)
         return e
     }
 

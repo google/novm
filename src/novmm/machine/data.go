@@ -3,7 +3,6 @@ package machine
 import (
     "bytes"
     "encoding/json"
-    "log"
     "novmm/platform"
 )
 
@@ -24,9 +23,7 @@ func (model *Model) LoadDevices(vm *platform.Vm, data []byte) error {
             return err
         }
 
-        // Good old context.
-        log.Printf("model: attaching %s...", device.Name())
-
+        // Try the attach.
         err = device.Attach(vm, model)
         if err != nil {
             return err

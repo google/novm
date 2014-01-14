@@ -357,7 +357,7 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     }
 
     // Map our shared data.
-    log.Printf("kvm: Mapping VCPU shared state...")
+    log.Printf("kvm: mapping VCPU shared state...")
     mmap, err := syscall.Mmap(
         int(vcpufd),
         0,

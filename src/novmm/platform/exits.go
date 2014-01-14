@@ -42,12 +42,12 @@ func (exitmmio *ExitMmio) IsWrite() bool {
 func (exit *ExitMmio) Error() string {
     if exit.write {
         return fmt.Sprintf(
-            "Memory-mapped write to 0x%08x (length: %d)",
+            "Memory-mapped write to %08x (length: %d)",
             exit.addr,
             exit.length)
     }
     return fmt.Sprintf(
-        "Memory-mapped read from 0x%08x (length: %d)",
+        "Memory-mapped read from %08x (length: %d)",
         exit.addr,
         exit.length)
 }
@@ -78,12 +78,12 @@ func (exitio *ExitPio) IsOut() bool {
 func (exit *ExitPio) Error() string {
     if exit.out {
         return fmt.Sprintf(
-            "Port out to 0x%04x (size: %d)",
+            "Port out to %04x (size: %d)",
             exit.port,
             exit.size)
     }
     return fmt.Sprintf(
-        "Port in from 0x%04x (size: %d)",
+        "Port in from %04x (size: %d)",
         exit.port,
         exit.size)
 }

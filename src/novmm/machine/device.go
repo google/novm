@@ -1,6 +1,7 @@
 package machine
 
 import (
+    "log"
     "novmm/platform"
 )
 
@@ -20,13 +21,12 @@ type Device interface {
 
     Attach(vm *platform.Vm, model *Model) error
 
-    IsDebugging() bool
+    Debug(format string, v ...interface{})
 }
 
 func (device *BaseDevice) Init(info *DeviceInfo) error {
     // Save our original device info.
-    // This is for convenience in implementing Name()
-    // IsDebugging() only and isn't structural.
+    // This isn't structural (hence the non-export).
     device.info = info
     return nil
 }
@@ -48,8 +48,10 @@ func (device *BaseDevice) MmioHandlers() IoHandlers {
     return IoHandlers{}
 }
 
-func (device *BaseDevice) IsDebugging() bool {
-    return device.info.Debug
+func (device *BaseDevice) Debug(format string, v ...interface{}) {
+    if device.info.Debug {
+        log.Printf(device.Name()+": "+format, v...)
+    }
 }
 
 func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {

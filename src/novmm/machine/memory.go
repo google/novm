@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "novmm/platform"
     "sort"
 )
@@ -152,15 +151,12 @@ func (memory *MemoryMap) Select(
     }
 
     // Verbose messages.
-    if device.IsDebugging() {
-        log.Printf(
-            "model: %s: reserving (type: %d) of size %x in [%x,%x]",
-            device.Name(),
-            memtype,
-            size,
-            start,
-            max.After(size-1))
-    }
+    device.Debug(
+        "reserving (type: %d) of size %x in [%x,%x]",
+        memtype,
+        size,
+        start,
+        max.After(size-1))
 
     search := start
     var region *TypedMemoryRegion
@@ -185,8 +181,8 @@ func (memory *MemoryMap) Select(
 
     // Nothing found.
     if region == nil {
-        log.Printf("model: conflict for %s: %x bytes in [%x,%x].",
-            device.Name(),
+        device.Debug(
+            "conflict for %x bytes in [%x,%x].",
             size,
             start,
             max.After(size-1))

@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "novmm/platform"
     "sort"
     "syscall"
@@ -88,13 +87,10 @@ func (user *UserMemory) Layout(
                 memory -= gap
             }
 
-            if user.IsDebugging() {
-                // Note the offset.
-                log.Printf(
-                    "user-memory: physical [%x,%x] -> file [%x,%x]",
-                    last_top, gap-1,
-                    start, start+gap-1)
-            }
+            user.Debug(
+                "physical [%x,%x] -> file [%x,%x]",
+                last_top, gap-1,
+                start, start+gap-1)
 
             // Allocate the bits.
             err := model.Reserve(

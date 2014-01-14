@@ -6,7 +6,6 @@ package machine
 import "C"
 
 import (
-    "log"
     "novmm/platform"
     "unsafe"
 )
@@ -60,7 +59,7 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         C.__u32(vm.IOApic()),
         C.__u32(0), // I/O APIC interrupt?
     )
-    log.Printf("acpi: MADT %x @ %x", madt_bytes, acpi.Addr)
+    acpi.Debug("MADT %x @ %x", madt_bytes, acpi.Addr)
 
     // Align offset.
     offset := madt_bytes
@@ -73,7 +72,7 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
     dsdt_bytes := C.build_dsdt(
         unsafe.Pointer(&acpi.Data[int(offset)]),
     )
-    log.Printf("acpi: DSDT %x @ %x", dsdt_bytes, dsdt_address)
+    acpi.Debug("DSDT %x @ %x", dsdt_bytes, dsdt_address)
 
     // Align offset.
     offset += dsdt_bytes
@@ -87,7 +86,7 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         unsafe.Pointer(&acpi.Data[int(offset)]),
         C.__u64(acpi.Addr), // MADT address.
     )
-    log.Printf("acpi: XSDT %x @ %x", xsdt_bytes, xsdt_address)
+    acpi.Debug("XSDT %x @ %x", xsdt_bytes, xsdt_address)
 
     // Align offset.
     offset += xsdt_bytes
@@ -101,7 +100,7 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         unsafe.Pointer(&acpi.Data[int(offset)]),
         C.__u32(acpi.Addr), // MADT address.
     )
-    log.Printf("acpi: RSDT %x @ %x", rsdt_bytes, rsdt_address)
+    acpi.Debug("RSDT %x @ %x", rsdt_bytes, rsdt_address)
 
     // Align offset.
     offset += rsdt_bytes
@@ -116,7 +115,7 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         C.__u32(rsdt_address), // RSDT address.
         C.__u64(xsdt_address), // XSDT address.
     )
-    log.Printf("acpi: RSDP %x @ %x", rsdp_bytes, rsdp_address)
+    acpi.Debug("RSDP %x @ %x", rsdp_bytes, rsdp_address)
 
     // Everything went okay.
     return nil

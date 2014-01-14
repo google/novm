@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "math"
     "novmm/platform"
 )
@@ -160,12 +159,10 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
     }
 
     // Debugging?
-    if reg.PciBus.last.IsDebugging() {
-        log.Printf("pci-bus:%s: config read %x @ %x",
-            reg.PciBus.last.Name(),
-            value,
-            reg.PciBus.Offset)
-    }
+    reg.PciBus.Debug(
+        "config read %x @ %x",
+        value,
+        reg.PciBus.Offset)
 
     return value, nil
 }
@@ -178,12 +175,10 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
     }
 
     // Debugging?
-    if reg.PciBus.last.IsDebugging() {
-        log.Printf("pci-bus:%s: config write %x @ %x",
-            reg.PciBus.last.Name(),
-            value,
-            reg.PciBus.Offset)
-    }
+    reg.PciBus.last.Debug(
+        "config write %x @ %x",
+        value,
+        reg.PciBus.Offset)
 
     // Is it greater than our built-in config?
     if int(reg.PciBus.Offset) >= len(reg.PciBus.last.config) {
@@ -295,13 +290,11 @@ func (pcidevice *PciDevice) RebuildBars() {
         // Mask out port-I/O bits.
         newreg := baraddr & ^(pcidevice.bars[i]-1) | 0xe
 
-        if pcidevice.IsDebugging() {
-            log.Printf("pci-bus:%s: bar %d @ %x -> %x",
-                pcidevice.Name(),
-                i,
-                baraddr,
-                newreg)
-        }
+        pcidevice.Debug(
+            "bar %d @ %x -> %x",
+            i,
+            baraddr,
+            newreg)
 
         // Rebuild our register values.
         if newreg == baraddr {
