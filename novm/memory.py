@@ -20,8 +20,7 @@ class UserMemory(device.Device):
 
         # No file given?
         if fd is None:
-            #with tempfile.NamedTemporaryFile() as tf:
-            with open("/tmp/foo.txt", 'w+') as tf:
+            with tempfile.NamedTemporaryFile() as tf:
                 fd = os.dup(tf.fileno())
 
         # No size given? Default to file size.

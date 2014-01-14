@@ -37,7 +37,7 @@ install -m0755 $(dirname $0)/init $WDIR/init
 
 # Copy our files.
 binfiles="ls sh sleep mount umount mkdir ln"
-sbinfiles="modprobe switch_root"
+sbinfiles="modprobe"
 
 if [ -x /bin/kmod ] ; then
     binfiles="$binfiles kmod"

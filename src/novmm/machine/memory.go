@@ -227,7 +227,8 @@ func (memory *MemoryMap) Select(
 
 func (memory *MemoryMap) Map(
     addr platform.Paddr,
-    size uint64) ([]byte, error) {
+    size uint64,
+    allocate bool) ([]byte, error) {
 
     for i := 0; i < len(*memory); i += 1 {
 
@@ -236,21 +237,25 @@ func (memory *MemoryMap) Map(
         if region.Contains(addr, size) &&
             region.MemoryType == MemoryTypeUser {
 
-            // Mark it as used.
             addr_offset := uint64(addr - region.Start)
-            for offset, alloc_size := range region.allocated {
-                if (addr_offset >= offset &&
-                    addr_offset < offset+alloc_size) ||
-                    (addr_offset+size >= offset &&
-                        addr_offset < offset) {
 
-                    // Already allocated?
-                    return nil, MemoryConflict
+            if allocate {
+                // Mark it as used.
+                for offset, alloc_size := range region.allocated {
+                    if (addr_offset >= offset &&
+                        addr_offset < offset+alloc_size) ||
+                        (addr_offset+size >= offset &&
+                            addr_offset < offset) {
+
+                        // Already allocated?
+                        return nil, MemoryConflict
+                    }
                 }
+
+                // Found it.
+                region.allocated[addr_offset] = size
             }
 
-            // Found it.
-            region.allocated[addr_offset] = size
             return region.user[addr_offset : addr_offset+size], nil
         }
     }
@@ -267,7 +272,7 @@ func (memory *MemoryMap) Allocate(
     if top {
         for ; end >= start; end -= platform.PageSize {
 
-            mmap, _ := memory.Map(end, size)
+            mmap, _ := memory.Map(end, size, true)
             if mmap != nil {
                 return end, mmap, nil
             }
@@ -276,7 +281,7 @@ func (memory *MemoryMap) Allocate(
     } else {
         for ; start <= end; start += platform.PageSize {
 
-            mmap, _ := memory.Map(start, size)
+            mmap, _ := memory.Map(start, size, true)
             if mmap != nil {
                 return start, mmap, nil
             }

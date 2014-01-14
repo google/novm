@@ -29,7 +29,8 @@ func doLoad(
     // Allocate the backing data.
     data, err := model.Map(
         platform.Paddr(offset),
-        new_length)
+        new_length,
+        true)
     if err != nil {
         // Things are broken.
         log.Print("Error during ElfLoad: ", err)
