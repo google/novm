@@ -13,7 +13,6 @@ static inline int vring_get_buf(
     if (consumed < vring->avail->idx) {
         *flags = vring->avail->flags;
         *index = vring->avail->ring[vring->avail->idx];
-        vring->avail->idx += 1;
         return 1;
     }
 
@@ -43,6 +42,13 @@ static inline void vring_put_buf(
     vring->used->ring[vring->used->idx].len = len;
     vring->used->idx += 1;
 }
+
+//
+// Descriptor flags.
+//
+const __u16 VirtioDescFNext = VRING_DESC_F_NEXT;
+const __u16 VirtioDescFWrite = VRING_DESC_F_WRITE;
+const __u16 VirtioDescFIndirect = VRING_DESC_F_INDIRECT;
 */
 import "C"
 
@@ -90,6 +96,7 @@ const (
 type VirtioBuffer struct {
     data  []byte
     index uint16
+    write bool
 }
 
 type VirtioChannel struct {
@@ -148,10 +155,13 @@ func (channel *VirtioChannel) Notify() error {
             }
 
             // Append our buffer.
-            channel.buffer = append(channel.buffer, VirtioBuffer{data, uint16(index)})
+            has_next := (buf_flags & C.VirtioDescFNext) != C.__u16(0)
+            is_write := (buf_flags & C.VirtioDescFWrite) != C.__u16(0)
+            buf := VirtioBuffer{data, uint16(index), is_write}
+            channel.buffer = append(channel.buffer, buf)
 
             // Are we finished?
-            if next == C.__u16(0) {
+            if !has_next {
                 // Send this buffer.
                 channel.incoming <- channel.buffer
                 channel.buffer = make([]VirtioBuffer, 0, 1)
@@ -180,6 +190,10 @@ func (channel *VirtioChannel) Interrupt() error {
 func (channel *VirtioChannel) Process() {
     for {
         bufs := <-channel.outgoing
+        if bufs == nil {
+            // Teardown.
+            return
+        }
 
         // Put in the virtqueue.
         total_len := 0
@@ -228,7 +242,7 @@ const (
     VirtioOffsetHostCap     = 0
     VirtioOffsetGuestCap    = 4
     VirtioOffsetQueuePfn    = 8
-    VirtioOffsetQueueNo     = 12
+    VirtioOffsetQueueSize   = 12
     VirtioOffsetQueueSel    = 14
     VirtioOffsetQueueNotify = 16
     VirtioOffsetStatus      = 18
@@ -258,7 +272,7 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
         // Queue doesn't exist.
         break
 
-    case VirtioOffsetQueueNo:
+    case VirtioOffsetQueueSize:
         if int(reg.QueueSelect.Value) < len(reg.VirtioDevice.channels) {
             queue := reg.VirtioDevice.channels[reg.QueueSelect.Value]
             return queue.QueueSize.Read(0, size)
@@ -298,8 +312,16 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
     case VirtioOffsetQueuePfn:
         if int(reg.QueueSelect.Value) < len(reg.VirtioDevice.channels) {
             queue := reg.VirtioDevice.channels[reg.QueueSelect.Value]
+
+            if value != queue.QueueAddress.Value &&
+                queue.QueueAddress.Value != 0 {
+                // Teardown.
+                queue.outgoing <- nil
+            }
+
             err := queue.QueueAddress.Write(0, size, value)
-            if err == nil {
+
+            if value != 0 && err == nil {
                 // Can we map this address?
                 queue_size := C.vring_size(
                     C.uint(queue.QueueSize.Value),
@@ -318,12 +340,16 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
                     unsafe.Pointer(&mmap[0]),
                     platform.PageSize)
 
+                // Start our goroutine which will process outgoing buffers.
+                // This will add the outgoing buffers back into the virtqueue.
+                go queue.Process()
+
                 return nil
             }
             return err
         }
 
-    case VirtioOffsetQueueNo:
+    case VirtioOffsetQueueSize:
         // This field is read-only.
         break
 
@@ -335,7 +361,9 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
         // Notify the queue if necessary.
         if int(value) < len(reg.VirtioDevice.channels) {
             queue := reg.VirtioDevice.channels[value]
-            return queue.Notify()
+            if queue.QueueAddress.Value != 0 {
+                return queue.Notify()
+            }
         }
         return reg.QueueNotify.Write(0, size, value)
 
@@ -382,10 +410,6 @@ func NewVirtioDevice(device Device, channels []uint) *VirtioDevice {
         virtio.channels[i].incoming = make(chan []VirtioBuffer, channels[i])
         virtio.channels[i].outgoing = make(chan []VirtioBuffer, channels[i])
         virtio.channels[i].buffer = make([]VirtioBuffer, 0, 1)
-
-        // Start our goroutine which will process outgoing buffers.
-        // This will add the outgoing buffers back into the virtqueue.
-        go virtio.channels[i].Process()
     }
 
     return virtio
