@@ -8,11 +8,13 @@ type VirtioBlockDevice struct {
 }
 
 func NewVirtioMmioBlock(info *DeviceInfo) (Device, error) {
-    device, err := NewMmioVirtioDevice(info, []uint{256}, VirtioTypeBlock)
+    device, err := NewMmioVirtioDevice(info, VirtioTypeBlock)
+    device.Channels[0] = device.NewVirtioChannel(256)
     return &VirtioBlockDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciBlock(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, []uint{256}, PciClassStorage, VirtioTypeBlock)
+    device, err := NewPciVirtioDevice(info, PciClassStorage, VirtioTypeBlock)
+    device.Channels[0] = device.NewVirtioChannel(256)
     return &VirtioBlockDevice{VirtioDevice: device}, err
 }

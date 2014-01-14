@@ -18,9 +18,10 @@ func NewPciHostBridge(info *DeviceInfo) (Device, error) {
     hostbridge.config[0xe] = 1    // Type.
 
     // Add our capabilities.
-    hostbridge.config[0x34] = 0x40                            // Cap pointer.
-    hostbridge.config = append(hostbridge.config, byte(0x40)) // Type port root.
-    hostbridge.config = append(hostbridge.config, byte(0))    // End of cap pointer.
+    hostbridge.config.GrowTo(0x42)
+    hostbridge.config[0x34] = 0x40 // Cap pointer.
+    hostbridge.config[0x40] = 0x40 // Type port root.
+    hostbridge.config[0x41] = 0x0  // End of cap pointer.
 
     // Done.
     return hostbridge, nil

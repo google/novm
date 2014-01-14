@@ -1,6 +1,7 @@
 package machine
 
 import (
+    "novmm/platform"
     "os"
 )
 
@@ -23,13 +24,27 @@ func dumpConsole(channel chan []VirtioBuffer) {
 }
 
 func NewVirtioMmioConsole(info *DeviceInfo) (Device, error) {
-    device, err := NewMmioVirtioDevice(info, []uint{16, 16}, VirtioTypeConsole)
-    go dumpConsole(device.channels[0].incoming)
+    device, err := NewMmioVirtioDevice(info, VirtioTypeConsole)
+    device.Channels[0] = device.NewVirtioChannel(16)
+    device.Channels[1] = device.NewVirtioChannel(16)
     return &VirtioConsoleDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciConsole(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, []uint{16, 16}, PciClassMisc, VirtioTypeConsole)
-    go dumpConsole(device.channels[0].incoming)
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioTypeConsole)
+    device.Channels[0] = device.NewVirtioChannel(16)
+    device.Channels[1] = device.NewVirtioChannel(16)
     return &VirtioConsoleDevice{VirtioDevice: device}, err
+}
+
+func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error {
+    err := console.VirtioDevice.Attach(vm, model)
+    if err != nil {
+        return err
+    }
+
+    // Start our console process.
+    go dumpConsole(console.Channels[0].incoming)
+
+    return nil
 }

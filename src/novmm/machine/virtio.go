@@ -99,16 +99,24 @@ type VirtioBuffer struct {
     write bool
 }
 
+type VirtioNotification struct {
+}
+
 type VirtioChannel struct {
     *VirtioDevice
 
     // Our channels.
-    incoming chan []VirtioBuffer
-    outgoing chan []VirtioBuffer
+    // Incoming is filled by the guest, and this
+    // is what higher-level drivers should pay attention
+    // to. Outgoing is where the buffers should be placed
+    // once they are filled. The exact semantics of how
+    // long buffers are held, etc. depends on the device.
+    incoming      chan []VirtioBuffer
+    outgoing      chan []VirtioBuffer
+    notifications chan VirtioNotification
 
-    // Current buffers.
-    buffer   []VirtioBuffer
-    consumed uint16
+    // What index have we consumed up to?
+    Consumed uint16 `json:"consumed"`
 
     // The queue size.
     QueueSize Register `json:"queue-size"`
@@ -120,7 +128,10 @@ type VirtioChannel struct {
     vring C.struct_vring
 }
 
-func (channel *VirtioChannel) Notify() error {
+func (vchannel *VirtioChannel) consumePending(
+    incoming chan []VirtioBuffer,
+    buffer []VirtioBuffer,
+    consumed uint16) ([]VirtioBuffer, uint16, error) {
 
     var flags C.__u16
     var index C.__u16
@@ -128,14 +139,14 @@ func (channel *VirtioChannel) Notify() error {
 
     // Fetch all buffers.
     for C.vring_get_buf(
-        &channel.vring,
-        C.__u16(channel.consumed),
+        &vchannel.vring,
+        C.__u16(vchannel.Consumed),
         &flags,
         &index,
         &used_event) != 0 {
 
         // We're up a buffer.
-        channel.consumed += 1
+        consumed += 1
 
         var addr C.__u64
         var len C.__u32
@@ -144,31 +155,31 @@ func (channel *VirtioChannel) Notify() error {
 
         for {
             // Read the entry.
-            C.vring_get_desc(&channel.vring, index, &addr, &len, &buf_flags, &next)
+            C.vring_get_desc(&vchannel.vring, index, &addr, &len, &buf_flags, &next)
 
             // Map the given address.
-            data, err := channel.VirtioDevice.mmap(
+            data, err := vchannel.VirtioDevice.mmap(
                 platform.Paddr(addr),
                 uint64(len))
             if err != nil {
-                return err
+                return buffer, consumed, err
             }
 
             // Append our buffer.
             has_next := (buf_flags & C.VirtioDescFNext) != C.__u16(0)
             is_write := (buf_flags & C.VirtioDescFWrite) != C.__u16(0)
             buf := VirtioBuffer{data, uint16(index), is_write}
-            channel.buffer = append(channel.buffer, buf)
+            buffer = append(buffer, buf)
 
             // Are we finished?
             if !has_next {
                 // Send this buffer.
-                channel.incoming <- channel.buffer
-                channel.buffer = make([]VirtioBuffer, 0, 1)
+                incoming <- buffer
+                buffer = make([]VirtioBuffer, 0, 1)
 
                 // Interrupt the guest?
                 if buf_flags == C.__u16(0) {
-                    channel.Interrupt()
+                    vchannel.Interrupt()
                 }
                 break
 
@@ -180,34 +191,53 @@ func (channel *VirtioChannel) Notify() error {
         }
     }
 
-    return nil
+    return buffer, consumed, nil
 }
 
-func (channel *VirtioChannel) Interrupt() error {
-    return nil
-}
+func (vchannel *VirtioChannel) ProcessIncoming(
+    notifications chan VirtioNotification,
+    incoming chan []VirtioBuffer) error {
 
-func (channel *VirtioChannel) Process() {
-    for {
-        bufs := <-channel.outgoing
-        if bufs == nil {
-            // Teardown.
-            return
+    buffer := make([]VirtioBuffer, 0, 0)
+    consumed := uint16(0)
+
+    for _ = range notifications {
+        var err error
+        buffer, consumed, err = vchannel.consumePending(
+            incoming,
+            buffer,
+            consumed)
+        if err != nil {
+            return err
         }
+    }
 
+    return nil
+}
+
+func (vchannel *VirtioChannel) Interrupt() error {
+    return nil
+}
+
+func (vchannel *VirtioChannel) ProcessOutgoing(
+    outgoing chan []VirtioBuffer) error {
+
+    for bufs := range outgoing {
         // Put in the virtqueue.
         total_len := 0
         for _, buf := range bufs {
             total_len += len(buf.data)
         }
         C.vring_put_buf(
-            &channel.vring,
+            &vchannel.vring,
             C.__u16(bufs[0].index),
             C.__u32(total_len))
 
         // Interrupt the guest.
-        channel.Interrupt()
+        vchannel.Interrupt()
     }
+
+    return nil
 }
 
 //
@@ -219,9 +249,10 @@ func (channel *VirtioChannel) Process() {
 type VirtioDevice struct {
     Device
 
-    // Our device channels.
-    // There is one set of channel
-    channels []*VirtioChannel
+    // Our channels.
+    // We expect that these will be configured
+    // by the different devices.
+    Channels map[uint]*VirtioChannel `json:"channels"`
 
     // Our virtio-specific registers.
     HostFeatures  Register `json:"host-features"`
@@ -265,16 +296,14 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
         return reg.GuestFeatures.Read(0, size)
 
     case VirtioOffsetQueuePfn:
-        if int(reg.QueueSelect.Value) < len(reg.VirtioDevice.channels) {
-            queue := reg.VirtioDevice.channels[reg.QueueSelect.Value]
+        if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
             return queue.QueueAddress.Read(0, size)
         }
         // Queue doesn't exist.
         break
 
     case VirtioOffsetQueueSize:
-        if int(reg.QueueSelect.Value) < len(reg.VirtioDevice.channels) {
-            queue := reg.VirtioDevice.channels[reg.QueueSelect.Value]
+        if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
             return queue.QueueSize.Read(0, size)
         }
         // We return zero if the queue doesn't exist.
@@ -310,43 +339,8 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
         return reg.GuestFeatures.Write(0, size, value)
 
     case VirtioOffsetQueuePfn:
-        if int(reg.QueueSelect.Value) < len(reg.VirtioDevice.channels) {
-            queue := reg.VirtioDevice.channels[reg.QueueSelect.Value]
-
-            if value != queue.QueueAddress.Value &&
-                queue.QueueAddress.Value != 0 {
-                // Teardown.
-                queue.outgoing <- nil
-            }
-
-            err := queue.QueueAddress.Write(0, size, value)
-
-            if value != 0 && err == nil {
-                // Can we map this address?
-                queue_size := C.vring_size(
-                    C.uint(queue.QueueSize.Value),
-                    platform.PageSize)
-                mmap, err := reg.VirtioDevice.mmap(
-                    platform.Paddr(4096*value),
-                    uint64(queue_size))
-                if err != nil {
-                    return err
-                }
-
-                // Initialize the ring.
-                C.vring_init(
-                    &queue.vring,
-                    C.uint(queue.QueueSize.Value),
-                    unsafe.Pointer(&mmap[0]),
-                    platform.PageSize)
-
-                // Start our goroutine which will process outgoing buffers.
-                // This will add the outgoing buffers back into the virtqueue.
-                go queue.Process()
-
-                return nil
-            }
-            return err
+        if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+            queue.SetAddress(size, value)
         }
 
     case VirtioOffsetQueueSize:
@@ -359,10 +353,9 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
 
     case VirtioOffsetQueueNotify:
         // Notify the queue if necessary.
-        if int(value) < len(reg.VirtioDevice.channels) {
-            queue := reg.VirtioDevice.channels[value]
+        if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
             if queue.QueueAddress.Value != 0 {
-                return queue.Notify()
+                queue.notifications <- VirtioNotification{}
             }
         }
         return reg.QueueNotify.Write(0, size, value)
@@ -397,21 +390,72 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
     return nil
 }
 
-func NewVirtioDevice(device Device, channels []uint) *VirtioDevice {
-    virtio := &VirtioDevice{Device: device}
+func (vchannel *VirtioChannel) SetAddress(size uint, value uint64) error {
 
-    virtio.channels = make([]*VirtioChannel, len(channels), len(channels))
-
-    for i := 0; i < len(channels); i += 1 {
-        virtio.channels[i] = new(VirtioChannel)
-        virtio.channels[i].VirtioDevice = virtio
-        virtio.channels[i].QueueSize.Value = uint64(channels[i])
-        virtio.channels[i].QueueAddress.Value = 0
-        virtio.channels[i].incoming = make(chan []VirtioBuffer, channels[i])
-        virtio.channels[i].outgoing = make(chan []VirtioBuffer, channels[i])
-        virtio.channels[i].buffer = make([]VirtioBuffer, 0, 1)
+    err := vchannel.QueueAddress.Write(0, size, value)
+    if err != nil {
+        return err
     }
 
+    if value != 0 {
+        // Can we map this address?
+        vchannel_size := C.vring_size(
+            C.uint(vchannel.QueueSize.Value),
+            platform.PageSize)
+
+        mmap, err := vchannel.VirtioDevice.mmap(
+            platform.Paddr(4096*value),
+            uint64(vchannel_size))
+
+        if err != nil {
+            return err
+        }
+
+        // Initialize the ring.
+        C.vring_init(
+            &vchannel.vring,
+            C.uint(vchannel.QueueSize.Value),
+            unsafe.Pointer(&mmap[0]),
+            platform.PageSize)
+
+    } else {
+        // Leave the address cleared. No notifcations
+        // will be processed as per the Write() function.
+    }
+
+    return nil
+}
+
+func (vchannel *VirtioChannel) Init() error {
+    // Can't have size 0.
+    // Ideally this wil be provided by the device.
+    if vchannel.QueueSize.Value == 0 {
+        return VirtioInvalidQueueSize
+    }
+
+    // Recreate channels.
+    vchannel.incoming = make(chan []VirtioBuffer, vchannel.QueueSize.Value)
+    vchannel.outgoing = make(chan []VirtioBuffer, vchannel.QueueSize.Value)
+    vchannel.notifications = make(chan VirtioNotification, 1)
+
+    // Start our goroutine which will process outgoing buffers.
+    // This will add the outgoing buffers back into the virtvchannel.
+    go vchannel.ProcessOutgoing(vchannel.outgoing)
+    go vchannel.ProcessIncoming(vchannel.notifications, vchannel.incoming)
+
+    return nil
+}
+
+func (device *VirtioDevice) NewVirtioChannel(size uint) *VirtioChannel {
+    vchannel := new(VirtioChannel)
+    vchannel.VirtioDevice = device
+    vchannel.QueueSize.Value = uint64(size)
+    return vchannel
+}
+
+func NewVirtioDevice(device Device) *VirtioDevice {
+    virtio := &VirtioDevice{Device: device}
+    virtio.Channels = make(map[uint]*VirtioChannel)
     return virtio
 }
 
@@ -422,7 +466,6 @@ const VirtioPciVendor = 0x1af4
 
 func NewPciVirtioDevice(
     info *DeviceInfo,
-    channels []uint,
     class PciClass,
     subsystem_id uint16) (*VirtioDevice, error) {
 
@@ -439,7 +482,7 @@ func NewPciVirtioDevice(
         return nil, err
     }
 
-    virtio := NewVirtioDevice(device, channels)
+    virtio := NewVirtioDevice(device)
     device.bars = []uint32{uint32(platform.PageSize)}
     device.barops = []IoOperations{&VirtioConf{virtio}}
 
@@ -483,14 +526,13 @@ type VirtioMmioDevice struct {
 
 func NewMmioVirtioDevice(
     info *DeviceInfo,
-    channels []uint,
     class int) (*VirtioDevice, error) {
 
     // Create our Mmio device.
     device := &VirtioMmioDevice{}
 
     // Create our new device.
-    virtio := NewVirtioDevice(device, channels)
+    virtio := NewVirtioDevice(device)
 
     // Set our I/O regions.
     device.MmioDevice.IoMap = IoMap{
@@ -508,6 +550,12 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
     // Save our map function.
     virtio.mmap = func(addr platform.Paddr, size uint64) ([]byte, error) {
         return model.Map(MemoryTypeUser, addr, size, false)
+    }
+
+    // Ensure that all our channels are reset.
+    // This will do the right thing for restore.
+    for _, vchannel := range virtio.Channels {
+        vchannel.Init()
     }
 
     return virtio.Device.Attach(vm, model)

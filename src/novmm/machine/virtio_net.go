@@ -11,11 +11,17 @@ type VirtioNetDevice struct {
 }
 
 func NewVirtioMmioNet(info *DeviceInfo) (Device, error) {
-    device, err := NewMmioVirtioDevice(info, []uint{256, 256, 16}, VirtioTypeNet)
+    device, err := NewMmioVirtioDevice(info, VirtioTypeNet)
+    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[1] = device.NewVirtioChannel(256)
+    device.Channels[2] = device.NewVirtioChannel(16)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, []uint{256, 256, 16}, PciClassNetwork, VirtioTypeNet)
+    device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet)
+    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[1] = device.NewVirtioChannel(256)
+    device.Channels[2] = device.NewVirtioChannel(16)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }

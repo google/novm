@@ -27,3 +27,6 @@ var UartUnknown = errors.New("Unknown COM port.")
 func DriverUnknown(name string) error {
     return errors.New(fmt.Sprintf("Unknown driver: %s", name))
 }
+
+// Virtio errors.
+var VirtioInvalidQueueSize = errors.New("Invalid VirtIO queue size!")
