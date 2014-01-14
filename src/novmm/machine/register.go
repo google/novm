@@ -53,13 +53,13 @@ func (register *Register) Write(offset uint64, size uint, value uint64) error {
 
     switch size {
     case 1:
-        mask = 0x000000ff & register.readonly
+        mask = 0x000000ff & ^register.readonly
     case 2:
-        mask = 0x0000ffff & register.readonly
+        mask = 0x0000ffff & ^register.readonly
     case 3:
-        mask = 0x00ffffff & register.readonly
+        mask = 0x00ffffff & ^register.readonly
     case 4:
-        mask = 0xffffffff & register.readonly
+        mask = 0xffffffff & ^register.readonly
     }
 
     value = value & mask
