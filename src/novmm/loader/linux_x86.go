@@ -122,6 +122,7 @@ func SetupLinux(
     // Copy in the GDT table.
     // These match the segments below.
     gdt_addr, gdt, err := model.Allocate(
+        machine.MemoryTypeUser,
         0,                 // Start.
         model.Max(),       // End.
         platform.PageSize, // Size.
@@ -185,6 +186,7 @@ func SetupLinux(
     if is_64bit {
         // Create our page tables.
         pde_addr, pde, err := model.Allocate(
+            machine.MemoryTypeUser,
             0,                 // Start.
             model.Max(),       // End.
             platform.PageSize, // Size.
@@ -193,6 +195,7 @@ func SetupLinux(
             return err
         }
         pgd_addr, pgd, err := model.Allocate(
+            machine.MemoryTypeUser,
             0,                 // Start.
             model.Max(),       // End.
             platform.PageSize, // Size.
@@ -201,6 +204,7 @@ func SetupLinux(
             return err
         }
         pml4_addr, pml4, err := model.Allocate(
+            machine.MemoryTypeUser,
             0,                 // Start.
             model.Max(),       // End.
             platform.PageSize, // Size.
@@ -345,6 +349,7 @@ func SetupLinux(
 
     // Create our boot parameters.
     boot_addr, boot_data, err := model.Allocate(
+        machine.MemoryTypeUser,
         0,                 // Start.
         model.Max(),       // End.
         platform.PageSize, // Size.

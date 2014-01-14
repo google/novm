@@ -183,28 +183,13 @@ func (memory *MemoryMap) Select(
         search += platform.PageSize
     }
 
-    // Beyond our current max?
-    if search > memory.Max() && start <= memory.Max() {
-        region = &TypedMemoryRegion{
-            MemoryRegion: MemoryRegion{memory.Max(), size},
-            MemoryType:   memtype,
-            Device:       device,
-            user:         user,
-            allocated:    make(map[uint64]uint64),
-        }
-        err := memory.Add(region)
-        if err != nil {
-            return region.MemoryRegion, err
-        }
-    }
-
     // Nothing found.
     if region == nil {
         log.Printf("model: conflict for %s: %x bytes in [%x,%x].",
             device.Name(),
             size,
             start,
-            max.After(size))
+            max.After(size-1))
         return MemoryRegion{}, MemoryConflict
     }
 
@@ -226,6 +211,7 @@ func (memory *MemoryMap) Select(
 }
 
 func (memory *MemoryMap) Map(
+    memtype MemoryType,
     addr platform.Paddr,
     size uint64,
     allocate bool) ([]byte, error) {
@@ -235,7 +221,7 @@ func (memory *MemoryMap) Map(
         region := (*memory)[i]
 
         if region.Contains(addr, size) &&
-            region.MemoryType == MemoryTypeUser {
+            region.MemoryType == memtype {
 
             addr_offset := uint64(addr - region.Start)
 
@@ -256,7 +242,11 @@ func (memory *MemoryMap) Map(
                 region.allocated[addr_offset] = size
             }
 
-            return region.user[addr_offset : addr_offset+size], nil
+            if region.user != nil {
+                return region.user[addr_offset : addr_offset+size], nil
+            } else {
+                return nil, nil
+            }
         }
     }
 
@@ -264,6 +254,7 @@ func (memory *MemoryMap) Map(
 }
 
 func (memory *MemoryMap) Allocate(
+    memtype MemoryType,
     start platform.Paddr,
     end platform.Paddr,
     size uint64,
@@ -272,7 +263,7 @@ func (memory *MemoryMap) Allocate(
     if top {
         for ; end >= start; end -= platform.PageSize {
 
-            mmap, _ := memory.Map(end, size, true)
+            mmap, _ := memory.Map(memtype, end, size, true)
             if mmap != nil {
                 return end, mmap, nil
             }
@@ -281,7 +272,7 @@ func (memory *MemoryMap) Allocate(
     } else {
         for ; start <= end; start += platform.PageSize {
 
-            mmap, _ := memory.Map(start, size, true)
+            mmap, _ := memory.Map(memtype, start, size, true)
             if mmap != nil {
                 return start, mmap, nil
             }
@@ -300,6 +291,7 @@ func (memory *MemoryMap) Load(
 
     // Allocate the backing data.
     addr, backing_mmap, err := memory.Allocate(
+        MemoryTypeUser,
         start,
         end,
         uint64(len(data)),

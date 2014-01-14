@@ -5,7 +5,6 @@ type Driver func(info *DeviceInfo) (Device, error)
 
 // All available device drivers.
 var drivers = map[string]Driver{
-    "tss":                 NewTss,
     "bios":                NewBios,
     "acpi":                NewAcpi,
     "rtc":                 NewRtc,

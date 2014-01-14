@@ -28,6 +28,7 @@ func doLoad(
 
     // Allocate the backing data.
     data, err := model.Map(
+        machine.MemoryTypeUser,
         platform.Paddr(offset),
         new_length,
         true)

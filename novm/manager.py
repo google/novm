@@ -123,7 +123,6 @@ class NovmManager(object):
             raise Exception("Kernel not found!")
 
         # Always add basic devices.
-        devices.append(basic.Tss())
         devices.append(basic.Bios())
         devices.append(basic.Acpi())
 

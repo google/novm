@@ -507,7 +507,7 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
 
     // Save our map function.
     virtio.mmap = func(addr platform.Paddr, size uint64) ([]byte, error) {
-        return model.Map(addr, size, false)
+        return model.Map(MemoryTypeUser, addr, size, false)
     }
 
     return virtio.Device.Attach(vm, model)
