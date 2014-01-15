@@ -1,6 +1,8 @@
 package machine
 
 /*
+#include <errno.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <net/if.h>
@@ -18,33 +20,31 @@ static inline int do_iovec(
     int fd,
     int count,
     void** ptrs,
-    int* szs,
+    int* sizes,
     int send) {
 
     int vecno;
-    struct msghdr hdr;
+    int rval;
     struct iovec vec[count+1];
-
-    hdr.msg_name = 0;
-    hdr.msg_namelen = 0;
-    hdr.msg_iov = &vec[0];
-    hdr.msg_iovlen = count;
-    hdr.msg_control = 0;
-    hdr.msg_controllen = 0;
-    hdr.msg_flags = 0;
 
     vec[0].iov_base = &pi_header;
     vec[0].iov_len = sizeof(pi_header);
 
     for (vecno = 0; vecno < count; vecno += 1) {
         vec[vecno+1].iov_base = (char*)ptrs[vecno];
-        vec[vecno+1].iov_len = szs[vecno];
+        vec[vecno+1].iov_len = sizes[vecno];
     }
 
     if (send) {
-        return sendmsg(fd, &hdr, 0);
+        rval = writev(fd, &vec[0], count+1);
     } else {
-        return recvmsg(fd, &hdr, 0);
+        rval = readv(fd, &vec[0], count+1);
+    }
+
+    if (rval < 0) {
+        return -errno;
+    } else {
+        return rval;
     }
 }
 */
@@ -52,6 +52,7 @@ import "C"
 
 import (
     "novmm/platform"
+    "syscall"
     "unsafe"
 )
 
@@ -67,10 +68,10 @@ type VirtioNetDevice struct {
 
 func (device *VirtioNetDevice) processPackets(
     vchannel *VirtioChannel,
-    recv bool) {
+    recv bool) error {
 
     ptrs := make([]unsafe.Pointer, 0, 0)
-    szs := make([]C.int, 0, 0)
+    sizes := make([]C.int, 0, 0)
 
     // Doing send or recv?
     var is_send C.int
@@ -82,40 +83,65 @@ func (device *VirtioNetDevice) processPackets(
 
     for bufs := range vchannel.incoming {
 
+        // Legit?
+        if len(bufs) < 1 || len(bufs[0].data) < 4 {
+            vchannel.outgoing <- bufs
+            continue
+        }
+
+        // Crop our header.
+        if recv {
+            header_len := 10
+            bufs[0].data = bufs[0].data[header_len:]
+        } else {
+            header_len := int(bufs[0].data[2]) + int(bufs[0].data[3])<<8
+            bufs[0].data = bufs[0].data[header_len:]
+        }
+
         // Collect all our buffers.
         for _, buf := range bufs {
-            ptrs = append(ptrs, unsafe.Pointer(&buf.data[0]))
-            szs = append(szs, C.int(len(buf.data)))
+            if len(buf.data) > 0 {
+                ptrs = append(ptrs, unsafe.Pointer(&buf.data[0]))
+                sizes = append(sizes, C.int(len(buf.data)))
+            }
         }
 
         // Send the constructed vector.
-        C.do_iovec(
+        rval := C.do_iovec(
             C.int(device.Fd),
-            C.int(len(bufs)),
+            C.int(len(ptrs)),
             &ptrs[0],
-            &szs[0],
+            &sizes[0],
             is_send)
+        if rval < C.int(0) {
+            return syscall.Errno(int(-rval))
+        }
+
+        // Set the lengths written.
+        for _, buf := range bufs {
+            if len(buf.data) >= int(rval) {
+                rval -= C.int(len(buf.data))
+            } else {
+                buf.data = buf.data[0:int(rval)]
+                rval = C.int(0)
+            }
+        }
 
         // Return the buffers.
         vchannel.outgoing <- bufs
 
-        if recv {
-            device.Debug("recv iovec w/ %d buffers...", len(bufs))
-        } else {
-            device.Debug("send iovec w/ %d buffers...", len(bufs))
-        }
-
         // Reslice.
         ptrs = ptrs[0:0]
-        szs = szs[0:0]
+        sizes = sizes[0:0]
     }
+
+    return nil
 }
 
 func NewVirtioMmioNet(info *DeviceInfo) (Device, error) {
     device, err := NewMmioVirtioDevice(info, VirtioTypeNet)
     device.Channels[0] = device.NewVirtioChannel(256)
     device.Channels[1] = device.NewVirtioChannel(256)
-    device.Channels[2] = device.NewVirtioChannel(16)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 
@@ -123,7 +149,6 @@ func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
     device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet)
     device.Channels[0] = device.NewVirtioChannel(256)
     device.Channels[1] = device.NewVirtioChannel(256)
-    device.Channels[2] = device.NewVirtioChannel(16)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 

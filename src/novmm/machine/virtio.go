@@ -40,6 +40,7 @@ static inline void vring_put_buf(
 
     vring->used->ring[vring->used->idx].id = index;
     vring->used->ring[vring->used->idx].len = len;
+    asm volatile ("" : : : "memory");
     vring->used->idx += 1;
 }
 
@@ -129,7 +130,7 @@ type VirtioChannel struct {
 
 func (vchannel *VirtioChannel) consumePending(
     incoming chan []VirtioBuffer,
-    buffer []VirtioBuffer,
+    bufs []VirtioBuffer,
     consumed uint16) ([]VirtioBuffer, uint16, error) {
 
     var flags C.__u16
@@ -161,20 +162,24 @@ func (vchannel *VirtioChannel) consumePending(
                 platform.Paddr(addr),
                 uint64(len))
             if err != nil {
-                return buffer, consumed, err
+                return bufs, consumed, err
             }
 
             // Append our buffer.
             has_next := (buf_flags & C.VirtioDescFNext) != C.__u16(0)
             is_write := (buf_flags & C.VirtioDescFWrite) != C.__u16(0)
-            buf := VirtioBuffer{data, uint16(index), is_write}
-            buffer = append(buffer, buf)
+            buf := VirtioBuffer{
+                data:  data,
+                index: uint16(index),
+                write: is_write,
+            }
+            bufs = append(bufs, buf)
 
             // Are we finished?
             if !has_next {
-                // Send this buffer.
-                incoming <- buffer
-                buffer = make([]VirtioBuffer, 0, 1)
+                // Send these buffers.
+                incoming <- bufs
+                bufs = make([]VirtioBuffer, 0, 1)
 
                 // Interrupt the guest?
                 if buf_flags == C.__u16(0) {
@@ -190,21 +195,21 @@ func (vchannel *VirtioChannel) consumePending(
         }
     }
 
-    return buffer, consumed, nil
+    return bufs, consumed, nil
 }
 
 func (vchannel *VirtioChannel) ProcessIncoming(
     notifications chan VirtioNotification,
     incoming chan []VirtioBuffer) error {
 
-    buffer := make([]VirtioBuffer, 0, 0)
+    bufs := make([]VirtioBuffer, 0, 0)
     consumed := uint16(0)
 
     for _ = range notifications {
         var err error
-        buffer, consumed, err = vchannel.consumePending(
+        bufs, consumed, err = vchannel.consumePending(
             incoming,
-            buffer,
+            bufs,
             consumed)
         if err != nil {
             return err
@@ -222,6 +227,7 @@ func (vchannel *VirtioChannel) ProcessOutgoing(
     outgoing chan []VirtioBuffer) error {
 
     for bufs := range outgoing {
+
         // Put in the virtqueue.
         total_len := 0
         for _, buf := range bufs {
