@@ -12,7 +12,7 @@ static inline int vring_get_buf(
 
     if (consumed < vring->avail->idx) {
         *flags = vring->avail->flags;
-        *index = vring->avail->ring[vring->avail->idx];
+        *index = vring->avail->ring[consumed];
         return 1;
     }
 
