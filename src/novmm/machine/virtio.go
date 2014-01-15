@@ -426,9 +426,10 @@ func (vchannel *VirtioChannel) SetAddress(size uint, value uint64) error {
 }
 
 func (vchannel *VirtioChannel) Init() error {
-    // Can't have size 0.
+    // Can't have size 0 or a non power of 2.
     // Ideally this wil be provided by the device.
-    if vchannel.QueueSize.Value == 0 {
+    if vchannel.QueueSize.Value == 0 ||
+        (vchannel.QueueSize.Value-1)&vchannel.QueueSize.Value != 0 {
         return VirtioInvalidQueueSize
     }
 
@@ -554,7 +555,10 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
     // Ensure that all our channels are reset.
     // This will do the right thing for restore.
     for _, vchannel := range virtio.Channels {
-        vchannel.Init()
+        err := vchannel.Init()
+        if err != nil {
+            return err
+        }
     }
 
     return virtio.Device.Attach(vm, model)

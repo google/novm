@@ -12,28 +12,29 @@ type VirtioConsoleDevice struct {
     Fd  int `json:"fd"`
 }
 
-func dumpConsole(channel chan []VirtioBuffer) {
+func (device *VirtioConsoleDevice) dumpConsole(vchannel *VirtioChannel) {
     // NOTE: This is just an example of how to
     // use a virtio device for the moment. This
     // will be done more rigorously shortly.
-    for bufs := range channel {
+    for bufs := range vchannel.incoming {
         for _, buf := range bufs {
             os.Stdout.Write(buf.data)
         }
+        vchannel.outgoing <- bufs
     }
 }
 
 func NewVirtioMmioConsole(info *DeviceInfo) (Device, error) {
     device, err := NewMmioVirtioDevice(info, VirtioTypeConsole)
-    device.Channels[0] = device.NewVirtioChannel(16)
-    device.Channels[1] = device.NewVirtioChannel(16)
+    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[1] = device.NewVirtioChannel(256)
     return &VirtioConsoleDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciConsole(info *DeviceInfo) (Device, error) {
     device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioTypeConsole)
-    device.Channels[0] = device.NewVirtioChannel(16)
-    device.Channels[1] = device.NewVirtioChannel(16)
+    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[1] = device.NewVirtioChannel(256)
     return &VirtioConsoleDevice{VirtioDevice: device}, err
 }
 
@@ -44,7 +45,7 @@ func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error 
     }
 
     // Start our console process.
-    go dumpConsole(console.Channels[0].incoming)
+    go console.dumpConsole(console.Channels[0])
 
     return nil
 }
