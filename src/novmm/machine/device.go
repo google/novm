@@ -21,6 +21,8 @@ type Device interface {
 
     Attach(vm *platform.Vm, model *Model) error
 
+    Interrupt() error
+
     Debug(format string, v ...interface{})
 }
 
@@ -55,5 +57,9 @@ func (device *BaseDevice) Debug(format string, v ...interface{}) {
 }
 
 func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {
+    return nil
+}
+
+func (device *BaseDevice) Interrupt() error {
     return nil
 }

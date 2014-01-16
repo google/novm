@@ -12,28 +12,28 @@ class Disk(virtio.Device):
             self,
             index=0,
             filename=None,
-            device=None,
+            dev=None,
             **kwargs):
 
-        super(Disk, self).__init__(**kwargs)
+        super(Disk, self).__init__(index=index, **kwargs)
 
         if filename is None:
             filename = "/dev/null"
-        if device is None:
-            device = "vd" + chr(ord("a") + index)
+        if dev is None:
+            dev = "vd" + chr(ord("a") + index)
 
         # Save our arguments.
         self._info = {
-            "device": device,
+            "dev": dev,
             "filename": filename,
         }
 
         # Open the device.
-        self._file = open(filename, 'w+b')
+        self._file = open(filename, 'r+b')
 
     def data(self):
         return {
-            "device": self._info["device"],
+            "dev": self._info["dev"],
             "fd": self._file.fileno(),
         }
 

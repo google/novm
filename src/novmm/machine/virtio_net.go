@@ -1,59 +1,7 @@
 package machine
 
-/*
-#include <errno.h>
-#include <sys/uio.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <net/if.h>
-#include <linux/if_tun.h>
-#include <linux/if_tunnel.h>
-
-static struct tun_pi pi_header;
-
-static inline void init_headers() {
-    pi_header.flags = 0;
-    pi_header.proto = __cpu_to_be16(ETH_P_IP);
-}
-
-static inline int do_iovec(
-    int fd,
-    int count,
-    void** ptrs,
-    int* sizes,
-    int send) {
-
-    int vecno;
-    int rval;
-    struct iovec vec[count+1];
-
-    vec[0].iov_base = &pi_header;
-    vec[0].iov_len = sizeof(pi_header);
-
-    for (vecno = 0; vecno < count; vecno += 1) {
-        vec[vecno+1].iov_base = (char*)ptrs[vecno];
-        vec[vecno+1].iov_len = sizes[vecno];
-    }
-
-    if (send) {
-        rval = writev(fd, &vec[0], count+1);
-    } else {
-        rval = readv(fd, &vec[0], count+1);
-    }
-
-    if (rval < 0) {
-        return -errno;
-    } else {
-        return rval;
-    }
-}
-*/
-import "C"
-
 import (
     "novmm/platform"
-    "syscall"
-    "unsafe"
 )
 
 type VirtioNetDevice struct {
@@ -70,69 +18,25 @@ func (device *VirtioNetDevice) processPackets(
     vchannel *VirtioChannel,
     recv bool) error {
 
-    ptrs := make([]unsafe.Pointer, 0, 0)
-    sizes := make([]C.int, 0, 0)
+    for buf := range vchannel.incoming {
 
-    // Doing send or recv?
-    var is_send C.int
-    if recv {
-        is_send = C.int(0)
-    } else {
-        is_send = C.int(1)
-    }
-
-    for bufs := range vchannel.incoming {
+        header := buf.Map(0, 10)
 
         // Legit?
-        if len(bufs) < 1 || len(bufs[0].data) < 4 {
-            vchannel.outgoing <- bufs
+        if header.Size() < 10 {
+            vchannel.outgoing <- buf
             continue
         }
 
-        // Crop our header.
+        // Doing send or recv?
         if recv {
-            header_len := 10
-            bufs[0].data = bufs[0].data[header_len:]
+            buf.Read(device.Fd, 10, buf.Length()-10)
         } else {
-            header_len := int(bufs[0].data[2]) + int(bufs[0].data[3])<<8
-            bufs[0].data = bufs[0].data[header_len:]
+            buf.Write(device.Fd, 10, buf.Length()-10)
         }
 
-        // Collect all our buffers.
-        for _, buf := range bufs {
-            if len(buf.data) > 0 {
-                ptrs = append(ptrs, unsafe.Pointer(&buf.data[0]))
-                sizes = append(sizes, C.int(len(buf.data)))
-            }
-        }
-
-        // Send the constructed vector.
-        rval := C.do_iovec(
-            C.int(device.Fd),
-            C.int(len(ptrs)),
-            &ptrs[0],
-            &sizes[0],
-            is_send)
-        if rval < C.int(0) {
-            return syscall.Errno(int(-rval))
-        }
-
-        // Set the lengths written.
-        for _, buf := range bufs {
-            if len(buf.data) >= int(rval) {
-                rval -= C.int(len(buf.data))
-            } else {
-                buf.data = buf.data[0:int(rval)]
-                rval = C.int(0)
-            }
-        }
-
-        // Return the buffers.
-        vchannel.outgoing <- bufs
-
-        // Reslice.
-        ptrs = ptrs[0:0]
-        sizes = sizes[0:0]
+        // Done.
+        vchannel.outgoing <- buf
     }
 
     return nil
@@ -163,8 +67,4 @@ func (net *VirtioNetDevice) Attach(vm *platform.Vm, model *Model) error {
     go net.processPackets(net.Channels[1], true)
 
     return nil
-}
-
-func init() {
-    C.init_headers()
 }

@@ -2,6 +2,7 @@ package machine
 
 import (
     "math"
+    "novmm/platform"
     "os"
 )
 
@@ -127,7 +128,7 @@ type Uart struct {
     Dlh Register `json:"dlh"`
 
     // Our allocated interrupt.
-    Interrupt int `json:"interrupt"`
+    InterruptNumber platform.Irq `json:"interrupt"`
 }
 
 func NewUart(info *DeviceInfo) (Device, error) {

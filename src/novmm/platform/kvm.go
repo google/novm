@@ -19,6 +19,7 @@ const int SetMpState = KVM_SET_MP_STATE;
 const int Translate = KVM_TRANSLATE;
 const int GetSupportedCpuid = KVM_GET_SUPPORTED_CPUID;
 const int SetCpuid = KVM_SET_CPUID2;
+const int SignalMsi = KVM_SIGNAL_MSI;
 
 // States.
 const int MpStateRunnable = KVM_MP_STATE_RUNNABLE;
@@ -39,6 +40,7 @@ const int CapIrqFd = KVM_CAP_IRQFD;
 const int CapPit2 = KVM_CAP_PIT2;
 const int CapGuestDebug = KVM_CAP_SET_GUEST_DEBUG;
 const int CapCpuid = KVM_CAP_EXT_CPUID;
+const int CapSignalMsi = KVM_CAP_SIGNAL_MSI;
 
 // We need to fudge the types for irq level.
 // This is because of the extremely annoying semantics
@@ -88,6 +90,10 @@ static void cpuid_finish(void *data) {
             // Note that we have an APIC.
             cpuid->entries[n].edx |= (1<<9);
         }
+        if (cpuid->entries[n].function == 0x80000001 ) {
+            // Mask the NX support.
+            cpuid->entries[n].edx &= ~(1 << 19);
+        }
     }
 }
 
@@ -125,6 +131,7 @@ var requiredCapabilities = []kvmCapability{
     kvmCapability{"IRQ Event FD", uintptr(C.CapIrqFd)},
     kvmCapability{"PIT2", uintptr(C.CapPit2)},
     kvmCapability{"CPUID", uintptr(C.CapCpuid)},
+    kvmCapability{"MSI", uintptr(C.CapSignalMsi)},
 
     // It does seem to be the case that this capability
     // is not advertised correctly. On my kernel (3.11),
@@ -448,6 +455,31 @@ func (vm *Vm) Interrupt(
         uintptr(vm.fd),
         uintptr(C.IrqLine),
         uintptr(unsafe.Pointer(&irq_level)))
+    if e != 0 {
+        return e
+    }
+
+    return nil
+}
+
+func (vm *Vm) SignalMSI(
+    addr Paddr,
+    data uint32,
+    flags uint32) error {
+
+    // Prepare the MSI.
+    var msi C.struct_kvm_msi
+    msi.address_lo = C.__u32(addr & 0xffffffff)
+    msi.address_hi = C.__u32(addr >> 32)
+    msi.data = C.__u32(data)
+    msi.flags = C.__u32(flags)
+
+    // Execute the ioctl.
+    _, _, e := syscall.Syscall(
+        syscall.SYS_IOCTL,
+        uintptr(vm.fd),
+        uintptr(C.SignalMsi),
+        uintptr(unsafe.Pointer(&msi)))
     if e != 0 {
         return e
     }

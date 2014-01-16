@@ -100,97 +100,34 @@ func (memory *MemoryMap) Reserve(
     size uint64,
     user []byte) error {
 
-    _, err := memory.Select(
-        vm,
-        device,
-        memtype,
-        start,
-        size,
-        start,
-        user)
-    return err
-}
-
-func (memory *MemoryMap) ReserveFind(
-    vm *platform.Vm,
-    device Device,
-    memtype MemoryType,
-    start platform.Paddr,
-    size uint64,
-    max platform.Paddr,
-    user []byte) (MemoryRegion, error) {
-
-    region, err := memory.Select(
-        vm,
-        device,
-        memtype,
-        start,
-        size,
-        max,
-        user)
-    if err != nil {
-        return region, err
-    }
-
-    return region, err
-}
-
-func (memory *MemoryMap) Select(
-    vm *platform.Vm,
-    device Device,
-    memtype MemoryType,
-    start platform.Paddr,
-    size uint64,
-    max platform.Paddr,
-    user []byte) (MemoryRegion, error) {
-
-    // Ensure all targets are aligned.
-    if (start.Align(platform.PageSize, false) != start) ||
-        (size%platform.PageSize != 0) {
-        return MemoryRegion{}, MemoryUnaligned
-    }
-
     // Verbose messages.
     device.Debug(
         "reserving (type: %d) of size %x in [%x,%x]",
         memtype,
         size,
         start,
-        max.After(size-1))
+        start.After(size-1))
 
-    search := start
-    var region *TypedMemoryRegion
-
-    // Can we find a region?
-    for search <= max {
-        if !memory.Conflicts(search, size) {
-            region = &TypedMemoryRegion{
-                MemoryRegion: MemoryRegion{search, size},
-                MemoryType:   memtype,
-                Device:       device,
-                user:         user,
-                allocated:    make(map[uint64]uint64),
-            }
-            err := memory.Add(region)
-            if err != nil {
-                return region.MemoryRegion, err
-            }
-        }
-        search += platform.PageSize
+    // Ensure all targets are aligned.
+    if (start.Align(platform.PageSize, false) != start) ||
+        (size%platform.PageSize != 0) {
+        return MemoryUnaligned
     }
 
-    // Nothing found.
-    if region == nil {
-        device.Debug(
-            "conflict for %x bytes in [%x,%x].",
-            size,
-            start,
-            max.After(size-1))
-        return MemoryRegion{}, MemoryConflict
+    // Add the region.
+    region := &TypedMemoryRegion{
+        MemoryRegion: MemoryRegion{start, size},
+        MemoryType:   memtype,
+        Device:       device,
+        user:         user,
+        allocated:    make(map[uint64]uint64),
+    }
+    err := memory.Add(region)
+    if err != nil {
+        return err
     }
 
     // Do the mapping.
-    var err error
     switch region.MemoryType {
     case MemoryTypeUser:
         err = vm.MapUserMemory(region.Start, region.Size, region.user)
@@ -203,7 +140,7 @@ func (memory *MemoryMap) Select(
     }
 
     // We're good?
-    return region.MemoryRegion, err
+    return err
 }
 
 func (memory *MemoryMap) Map(

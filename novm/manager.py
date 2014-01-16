@@ -58,7 +58,7 @@ class NovmManager(object):
             read=cli.ListOpt("Define a backing filesystem read tree."),
             write=cli.ListOpt("Define a backing filesystem write tree."),
             console=cli.BoolOpt("Enable virtual console?"),
-            usepci=cli.BoolOpt("Enable PCI devices?"),
+            nopci=cli.BoolOpt("Disable PCI devices?"),
             com1=cli.BoolOpt("Enable COM1 UART?"),
             com2=cli.BoolOpt("Enable COM2 UART?"),
             cmdline=cli.StrOpt("Extra command line options?"),
@@ -132,31 +132,6 @@ class NovmManager(object):
         args.extend(["-initrd", self._kernels.file(kernel, "initrd")])
         args.extend(["-setup", self._kernels.file(kernel, "setup")])
 
-        # Use a PCI bus?
-        if usepci:
-            devices.append(pci.PciBus())
-            devices.append(pci.PciHostBridge())
-
-        # Build our NICs.
-        devices.extend([
-            net.Nic(index=index, pci=usepci,
-                **dict([
-                opt.split("=", 1)
-                for opt in nic.split(",")
-            ]))
-            for (index, nic) in zip(range(len(nic)), nic)
-        ])
-
-        # Build our disks.
-        devices.extend([
-            block.Disk(index=index, pci=usepci,
-                **dict([
-                opt.split("=", 1)
-                for opt in disk.split(",")
-            ]))
-            for (index, disk) in zip(range(len(disk)), disk)
-        ])
-
         # Use uart devices?
         if com1:
             devices.append(serial.Com1())
@@ -166,10 +141,35 @@ class NovmManager(object):
         # ALways enable an RTC.
         devices.append(clock.Rtc())
 
+        # Use a PCI bus?
+        if not(nopci):
+            devices.append(pci.PciBus())
+            devices.append(pci.PciHostBridge())
+
         # Always enable the console.
         # The noguest binary that executes inside
         # the guest will use this as an RPC mechanism.
-        devices.append(serial.Console(pci=usepci))
+        devices.append(serial.Console(index=0, pci=not(nopci)))
+
+        # Build our NICs.
+        devices.extend([
+            net.Nic(index=1+index, pci=not(nopci),
+                **dict([
+                opt.split("=", 1)
+                for opt in nic.split(",")
+            ]))
+            for (index, nic) in zip(range(len(nic)), nic)
+        ])
+
+        # Build our disks.
+        devices.extend([
+            block.Disk(index=1+len(nic)+index, pci=not(nopci),
+                **dict([
+                opt.split("=", 1)
+                for opt in disk.split(",")
+            ]))
+            for (index, disk) in zip(range(len(disk)), disk)
+        ])
 
         # Enable user-memory.
         devices.append(memory.UserMemory(

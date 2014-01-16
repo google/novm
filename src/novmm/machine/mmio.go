@@ -34,6 +34,9 @@ type MmioDevice struct {
     // Our address in memory.
     Offset platform.Paddr `json:"address"`
 
+    // Our assigned interrupt.
+    InterruptNumber platform.Irq `json:"interrupt"`
+
     // Regions that should be reserved.
     // NOTE: These have the offset applied.
     reservations []MemoryRegion `json:"-"`
@@ -64,6 +67,25 @@ func (mmio *MmioDevice) Attach(vm *platform.Vm, model *Model) error {
                 nil)
             if err != nil {
                 return err
+            }
+        }
+    }
+
+    if mmio.InterruptNumber != 0 {
+        // Reserve our interrupt.
+        _, ok := model.InterruptMap[mmio.InterruptNumber]
+        if ok {
+            // Already a device there.
+            return InterruptConflict
+        }
+        model.InterruptMap[mmio.InterruptNumber] = mmio
+
+    } else {
+        // Find an interrupt.
+        for irq := platform.Irq(16); ; irq += 1 {
+            if _, ok := model.InterruptMap[irq]; !ok {
+                model.InterruptMap[irq] = mmio
+                mmio.InterruptNumber = irq
             }
         }
     }

@@ -10,16 +10,29 @@ static inline int vring_get_buf(
     __u16* index,
     __u16* used_event) {
 
-    if (consumed < vring->avail->idx) {
+    if (consumed != vring->avail->idx) {
         *flags = vring->avail->flags;
-        *index = vring->avail->ring[consumed];
+        *index = vring->avail->ring[consumed%vring->num];
         return 1;
     }
 
     return 0;
 }
 
-static inline void vring_get_desc(
+static inline void vring_read_desc(
+    struct vring_desc* desc,
+    __u64* addr,
+    __u32* len,
+    __u16* flags,
+    __u16* next) {
+
+    *addr = desc->addr;
+    *len = desc->len;
+    *flags = desc->flags;
+    *next = desc->next;
+}
+
+static inline void vring_get_index(
     struct vring* vring,
     __u16 index,
     __u64* addr,
@@ -27,10 +40,7 @@ static inline void vring_get_desc(
     __u16* flags,
     __u16* next) {
 
-    *addr = vring->desc[index].addr;
-    *len = vring->desc[index].len;
-    *flags = vring->desc[index].flags;
-    *next = vring->desc[index].next;
+    vring_read_desc(&vring->desc[index], addr, len, flags, next);
 }
 
 static inline void vring_put_buf(
@@ -38,10 +48,11 @@ static inline void vring_put_buf(
     __u16 index,
     __u32 len) {
 
-    vring->used->ring[vring->used->idx].id = index;
-    vring->used->ring[vring->used->idx].len = len;
+    vring->used->ring[vring->used->idx%vring->num].id = index;
+    vring->used->ring[vring->used->idx%vring->num].len = len;
     asm volatile ("" : : : "memory");
     vring->used->idx += 1;
+    asm volatile ("" : : : "memory");
 }
 
 //
@@ -54,8 +65,10 @@ const __u16 VirtioDescFIndirect = VRING_DESC_F_INDIRECT;
 import "C"
 
 import (
+    "log"
     "math"
     "novmm/platform"
+    "sync/atomic"
     "unsafe"
 )
 
@@ -93,11 +106,6 @@ const (
 // other details are completely left over for the
 // device driver itself.
 //
-type VirtioBuffer struct {
-    data  []byte
-    index uint16
-    write bool
-}
 
 type VirtioNotification struct {
 }
@@ -105,15 +113,26 @@ type VirtioNotification struct {
 type VirtioChannel struct {
     *VirtioDevice
 
+    // Our channel number (set in Init().
+    channelno uint
+
     // Our channels.
     // Incoming is filled by the guest, and this
     // is what higher-level drivers should pay attention
     // to. Outgoing is where the buffers should be placed
     // once they are filled. The exact semantics of how
     // long buffers are held, etc. depends on the device.
-    incoming      chan []VirtioBuffer
-    outgoing      chan []VirtioBuffer
+    incoming chan *VirtioBuffer
+    outgoing chan *VirtioBuffer
+
+    // Notification channel.
+    // This is used internally for notifications that
+    // drive us consuming buffers. It is not intended
+    // for any device-specific code to use.
     notifications chan VirtioNotification
+
+    // Currently pending notifications?
+    pending int32
 
     // What index have we consumed up to?
     Consumed uint16 `json:"consumed"`
@@ -128,17 +147,14 @@ type VirtioChannel struct {
     vring C.struct_vring
 }
 
-func (vchannel *VirtioChannel) consumePending(
-    incoming chan []VirtioBuffer,
-    bufs []VirtioBuffer,
-    consumed uint16) ([]VirtioBuffer, uint16, error) {
+func (vchannel *VirtioChannel) consumeOne() (bool, error) {
 
     var flags C.__u16
     var index C.__u16
     var used_event C.__u16
 
-    // Fetch all buffers.
-    for C.vring_get_buf(
+    // Fetch the next buffer.
+    if C.vring_get_buf(
         &vchannel.vring,
         C.__u16(vchannel.Consumed),
         &flags,
@@ -146,40 +162,76 @@ func (vchannel *VirtioChannel) consumePending(
         &used_event) != 0 {
 
         // We're up a buffer.
-        consumed += 1
+        vchannel.Debug(
+            "vqueue#%d incoming slot [%d]",
+            vchannel.channelno,
+            index)
+        vchannel.Consumed += 1
 
+        var buf *VirtioBuffer
         var addr C.__u64
-        var len C.__u32
+        var length C.__u32
         var buf_flags C.__u16
         var next C.__u16
 
         for {
             // Read the entry.
-            C.vring_get_desc(&vchannel.vring, index, &addr, &len, &buf_flags, &next)
-
-            // Map the given address.
-            data, err := vchannel.VirtioDevice.mmap(
-                platform.Paddr(addr),
-                uint64(len))
-            if err != nil {
-                return bufs, consumed, err
-            }
+            C.vring_get_index(
+                &vchannel.vring,
+                index,
+                &addr,
+                &length,
+                &buf_flags,
+                &next)
 
             // Append our buffer.
             has_next := (buf_flags & C.VirtioDescFNext) != C.__u16(0)
             is_write := (buf_flags & C.VirtioDescFWrite) != C.__u16(0)
-            buf := VirtioBuffer{
-                data:  data,
-                index: uint16(index),
-                write: is_write,
+            is_indirect := (buf_flags & C.VirtioDescFIndirect) != C.__u16(0)
+
+            // Do we have a buffer?
+            if buf == nil {
+                buf = NewVirtioBuffer(uint16(index), !is_write)
             }
-            bufs = append(bufs, buf)
+
+            if is_indirect {
+                // FIXME: Map all indirect buffers.
+                log.Printf("WARNING: Indirect buffers not supported.")
+
+            } else {
+                // Map the given address.
+                vchannel.Debug("vqueue#%d map [%x-%x]",
+                    vchannel.channelno,
+                    platform.Paddr(addr),
+                    uint64(addr)+uint64(length)-1)
+
+                data, err := vchannel.VirtioDevice.mmap(
+                    platform.Paddr(addr),
+                    uint64(length))
+
+                if err != nil {
+                    log.Printf(
+                        "Unable to map [%x,%x]? Flags are %x, next is %x.",
+                        addr,
+                        addr+C.__u64(length)-1,
+                        buf_flags,
+                        next)
+                    return false, err
+                }
+
+                // Append this segment.
+                buf.Append(data)
+            }
 
             // Are we finished?
             if !has_next {
                 // Send these buffers.
-                incoming <- bufs
-                bufs = make([]VirtioBuffer, 0, 1)
+                vchannel.Debug(
+                    "vqueue#%d processing slot [%d]",
+                    vchannel.channelno,
+                    buf.index)
+
+                vchannel.incoming <- buf
 
                 // Interrupt the guest?
                 if buf_flags == C.__u16(0) {
@@ -190,53 +242,58 @@ func (vchannel *VirtioChannel) consumePending(
             } else {
                 // Keep chaining.
                 index = next
+                vchannel.Debug(
+                    "vqueue#%d next slot [%d]",
+                    vchannel.channelno,
+                    index)
                 continue
+            }
+        }
+
+        return true, nil
+    }
+
+    return false, nil
+}
+
+func (vchannel *VirtioChannel) ProcessIncoming() error {
+
+    for _ = range vchannel.notifications {
+
+        // Reset our pending variable.
+        // A write to the notification register
+        // will drop a notification in the channel
+        // again -- which is okay as the channel
+        // should now be empty.
+        atomic.StoreInt32(&vchannel.pending, 0)
+
+        for {
+            found, err := vchannel.consumeOne()
+            if err != nil {
+                return err
+            }
+            if !found {
+                break
             }
         }
     }
 
-    return bufs, consumed, nil
-}
-
-func (vchannel *VirtioChannel) ProcessIncoming(
-    notifications chan VirtioNotification,
-    incoming chan []VirtioBuffer) error {
-
-    bufs := make([]VirtioBuffer, 0, 0)
-    consumed := uint16(0)
-
-    for _ = range notifications {
-        var err error
-        bufs, consumed, err = vchannel.consumePending(
-            incoming,
-            bufs,
-            consumed)
-        if err != nil {
-            return err
-        }
-    }
-
     return nil
 }
 
-func (vchannel *VirtioChannel) Interrupt() error {
-    return nil
-}
+func (vchannel *VirtioChannel) ProcessOutgoing() error {
 
-func (vchannel *VirtioChannel) ProcessOutgoing(
-    outgoing chan []VirtioBuffer) error {
-
-    for bufs := range outgoing {
+    for buf := range vchannel.outgoing {
 
         // Put in the virtqueue.
-        total_len := 0
-        for _, buf := range bufs {
-            total_len += len(buf.data)
-        }
+        vchannel.Debug(
+            "vqueue#%d outgoing slot [%d]",
+            vchannel.channelno,
+            buf.index)
         C.vring_put_buf(
             &vchannel.vring,
-            C.__u16(bufs[0].index),
-            C.__u32(total_len))
+            C.__u16(buf.index),
+            C.__u32(buf.length))
 
         // Interrupt the guest.
         vchannel.Interrupt()
@@ -258,6 +315,9 @@ type VirtioDevice struct {
     // We expect that these will be configured
     // by the different devices.
     Channels map[uint]*VirtioChannel `json:"channels"`
+
+    // Our configuration.
+    Config Ram `json:"config"`
 
     // Our virtio-specific registers.
     HostFeatures  Register `json:"host-features"`
@@ -327,8 +387,31 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
     case VirtioOffsetIsr:
         return reg.IsrStatus.Read(0, size)
 
-    case VirtioOffsetCfgVec:
-    case VirtioOffsetQueueVec:
+    default:
+        if reg.VirtioDevice.IsMSIEnabled() {
+            switch offset {
+            case VirtioOffsetCfgVec:
+                return math.MaxUint64, nil
+            case VirtioOffsetQueueVec:
+                return math.MaxUint64, nil
+            default:
+                reg.Debug(
+                    "read device @ %x->%x (msi-enabled)",
+                    offset,
+                    offset-VirtioOffsetQueueVec-1)
+                return reg.VirtioDevice.Config.Read(
+                    offset-VirtioOffsetQueueVec-1,
+                    size)
+            }
+        } else {
+            reg.Debug(
+                "read device @ %x->%x (no-msi-enabled)",
+                offset,
+                offset-VirtioOffsetIsr-1)
+            return reg.VirtioDevice.Config.Read(
+                offset-VirtioOffsetIsr-1,
+                size)
+        }
     }
 
     return math.MaxUint64, nil
@@ -345,7 +428,7 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
 
     case VirtioOffsetQueuePfn:
         if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
-            queue.SetAddress(size, value)
+            return queue.SetAddress(size, value)
         }
 
     case VirtioOffsetQueueSize:
@@ -358,9 +441,14 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
 
     case VirtioOffsetQueueNotify:
         // Notify the queue if necessary.
-        if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+        if queue, ok := reg.VirtioDevice.Channels[uint(value)]; ok {
             if queue.QueueAddress.Value != 0 {
-                queue.notifications <- VirtioNotification{}
+                // Do we need a notification?
+                // We do this to avoid blocking when there are
+                // already pending notifications in the channel.
+                if atomic.CompareAndSwapInt32(&queue.pending, 0, 1) {
+                    queue.notifications <- VirtioNotification{}
+                }
             }
         }
         return reg.QueueNotify.Write(0, size, value)
@@ -368,6 +456,12 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
     case VirtioOffsetStatus:
         if value == VirtioStatusReboot {
             reg.Device.Debug("reboot")
+            for _, vchannel := range reg.VirtioDevice.Channels {
+                err := vchannel.SetAddress(4, 0)
+                if err != nil {
+                    return err
+                }
+            }
         }
         if reg.DeviceStatus.Value&VirtioStatusAck == 0 &&
             value&VirtioStatusAck != 0 {
@@ -386,21 +480,53 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
             reg.Device.Debug("failed")
         }
         return reg.DeviceStatus.Write(0, size, value)
+
     case VirtioOffsetIsr:
         return reg.IsrStatus.Write(0, size, value)
-    case VirtioOffsetCfgVec:
-    case VirtioOffsetQueueVec:
+
+    default:
+        if reg.VirtioDevice.IsMSIEnabled() {
+            switch offset {
+            case VirtioOffsetCfgVec:
+                return nil
+            case VirtioOffsetQueueVec:
+                return nil
+            default:
+                reg.Debug(
+                    "write device @ %x->%x (msi-enabled)",
+                    offset,
+                    offset-VirtioOffsetQueueVec-1)
+                return reg.VirtioDevice.Config.Write(
+                    offset-VirtioOffsetQueueVec-1,
+                    size,
+                    value)
+            }
+        } else {
+            reg.Debug(
+                "write device @ %x->%x (no-msi-enabled)",
+                offset,
+                offset-VirtioOffsetIsr-1)
+            return reg.VirtioDevice.Config.Write(
+                offset-VirtioOffsetIsr-1,
+                size,
+                value)
+        }
     }
 
     return nil
 }
 
-func (vchannel *VirtioChannel) SetAddress(size uint, value uint64) error {
+func (vchannel *VirtioChannel) SetAddress(
+    size uint,
+    value uint64) error {
 
     err := vchannel.QueueAddress.Write(0, size, value)
     if err != nil {
         return err
     }
+
+    // Reset our consumed amount.
+    vchannel.Consumed = 0
 
     if value != 0 {
         // Can we map this address?
@@ -423,6 +549,9 @@ func (vchannel *VirtioChannel) SetAddress(size uint, value uint64) error {
             unsafe.Pointer(&mmap[0]),
             platform.PageSize)
 
+        // Notify the consumer.
+        vchannel.notifications <- VirtioNotification{}
+
     } else {
         // Leave the address cleared. No notifcations
         // will be processed as per the Write() function.
@@ -431,7 +560,11 @@ func (vchannel *VirtioChannel) SetAddress(size uint, value uint64) error {
     return nil
 }
 
-func (vchannel *VirtioChannel) Init() error {
+func (vchannel *VirtioChannel) Init(n uint) error {
+
+    // Save our channel number.
+    vchannel.channelno = n
+
     // Can't have size 0 or a non power of 2.
     // Ideally this wil be provided by the device.
     if vchannel.QueueSize.Value == 0 ||
@@ -440,28 +573,32 @@ func (vchannel *VirtioChannel) Init() error {
     }
 
     // Recreate channels.
-    vchannel.incoming = make(chan []VirtioBuffer, vchannel.QueueSize.Value)
-    vchannel.outgoing = make(chan []VirtioBuffer, vchannel.QueueSize.Value)
+    vchannel.incoming = make(chan *VirtioBuffer)
+    vchannel.outgoing = make(chan *VirtioBuffer)
     vchannel.notifications = make(chan VirtioNotification, 1)
 
     // Start our goroutine which will process outgoing buffers.
     // This will add the outgoing buffers back into the virtvchannel.
-    go vchannel.ProcessOutgoing(vchannel.outgoing)
-    go vchannel.ProcessIncoming(vchannel.notifications, vchannel.incoming)
+    go vchannel.ProcessOutgoing()
+    go vchannel.ProcessIncoming()
 
     return nil
 }
 
 func (device *VirtioDevice) NewVirtioChannel(size uint) *VirtioChannel {
+
     vchannel := new(VirtioChannel)
     vchannel.VirtioDevice = device
     vchannel.QueueSize.Value = uint64(size)
+
     return vchannel
 }
 
 func NewVirtioDevice(device Device) *VirtioDevice {
     virtio := &VirtioDevice{Device: device}
+    virtio.Config = make(Ram, 0, 0)
     virtio.Channels = make(map[uint]*VirtioChannel)
+    virtio.IsrStatus.readclr = 0x1
     return virtio
 }
 
@@ -489,8 +626,8 @@ func NewPciVirtioDevice(
     }
 
     virtio := NewVirtioDevice(device)
-    device.bars = []uint32{uint32(platform.PageSize)}
-    device.barops = []IoOperations{&VirtioConf{virtio}}
+    device.BarSizes[0] = platform.PageSize
+    device.BarOps[0] = &VirtioConf{virtio}
 
     return virtio, device.Init(info)
 }
@@ -525,9 +662,6 @@ func (reg *VirtioMmioConf) Write(offset uint64, size uint, value uint64) error {
 
 type VirtioMmioDevice struct {
     MmioDevice
-
-    // Our assigned interrupt (may be configured via PCI).
-    Interrupt int `json:"interrupt"`
 }
 
 func NewMmioVirtioDevice(
@@ -551,6 +685,14 @@ func NewMmioVirtioDevice(
     return virtio, device.Init(info)
 }
 
+func (virtio *VirtioDevice) SetFeatures(features uint32) {
+    virtio.HostFeatures.Value = uint64(features)
+}
+
+func (virtio *VirtioDevice) HasFeatures(features uint32) bool {
+    return (uint32(virtio.GuestFeatures.Value) & features) == features
+}
+
 func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
 
     // Save our map function.
@@ -560,12 +702,25 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
 
     // Ensure that all our channels are reset.
     // This will do the right thing for restore.
-    for _, vchannel := range virtio.Channels {
-        err := vchannel.Init()
+    for n, vchannel := range virtio.Channels {
+        err := vchannel.Init(n)
         if err != nil {
             return err
         }
     }
 
     return virtio.Device.Attach(vm, model)
+}
+
+func (virtio *VirtioDevice) IsMSIEnabled() bool {
+    pcidevice, ok := virtio.Device.(*PciDevice)
+    if ok {
+        return pcidevice.IsMSIEnabled()
+    }
+    return false
+}
+
+func (virtio *VirtioDevice) Interrupt() error {
+    virtio.IsrStatus.Value = virtio.IsrStatus.Value | 0x1
+    return virtio.Device.Interrupt()
 }

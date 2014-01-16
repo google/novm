@@ -1,5 +1,12 @@
 #!/bin/sh
 
+# Mount proc, etc.
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs tmpfs /run
+mount -t devpts devpts /dev/pts
+
 # Parse our command line arguments.
 # Critically this will include information
 # about attached devices, IP addresses, etc.
@@ -17,10 +24,20 @@ echo "Initial ramdisk running..." > /dev/kmsg
 # Load all virt-io modules.
 modprobe virtio-pci
 modprobe virtio-net
-modprobe virtio-block
+modprobe virtio-blk
 modprobe virtio-console
 modprobe 9pnet_virtio
 modprobe 9p
+modprobe ext4
+
+# Shell...
+echo "Entering interactive shell..." > /dev/hvc0
+/bin/sh -i < /dev/hvc0 > /dev/hvc0 2>&1
+
+# Run our root.
+mkdir -p /sysroot 2>/dev/kmsg
+mount -t ext4 /dev/vda /sysroot 2>/dev/kmsg
+exec switch_root /sysroot sbin/init < /dev/hvc0 > /dev/hvc0 2>&1
 
 # Execute our noinit process.
 #

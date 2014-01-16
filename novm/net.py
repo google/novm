@@ -50,7 +50,8 @@ def parse_ipv4mask(ip):
 def tap_device(name):
     """ Create a tap device. """
     tap = open('/dev/net/tun', 'r+b')
-    ifr = struct.pack('16sH', name, 0x2)
+    # Flags are IFF_TAP|IFF_NO_PI.
+    ifr = struct.pack('16sH', name, 0x1002)
     fcntl.ioctl(tap, 0x400454ca, ifr)
     return tap
 
@@ -60,7 +61,6 @@ class Nic(virtio.Device):
 
     def __init__(
             self,
-            index=0,
             mac=None,
             tapname=None,
             bridge=None,

@@ -93,6 +93,18 @@ func NewIoHandler(
     return io
 }
 
+func normalize(val uint64, size uint) uint64 {
+    switch size {
+    case 1:
+        return val & 0xff
+    case 2:
+        return val & 0xffff
+    case 4:
+        return val & 0xffffffff
+    }
+    return val
+}
+
 func (io *IoHandler) Run() {
 
     for {
@@ -102,7 +114,7 @@ func (io *IoHandler) Run() {
 
         // Perform the operation.
         if req.event.IsWrite() {
-            val := req.event.GetData()
+            val := normalize(req.event.GetData(), size)
             err := io.operations.Write(req.offset, size, val)
             req.result <- err
 
@@ -114,6 +126,7 @@ func (io *IoHandler) Run() {
 
         } else {
             val, err := io.operations.Read(req.offset, size)
+            val = normalize(val, size)
             if err == nil {
                 req.event.SetData(val)
             }
