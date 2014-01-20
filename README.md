@@ -28,6 +28,11 @@ for running legacy applications, but ideal for modern cloud-based virtualization
 use cases. *novm* was originally called *pervirt*, but this name was changed
 after it was suggested that this name *could* be misconstrued.
 
+Requirements
+------------
+
+*novm* requires at least go 1.1.
+
 Technical Details
 -----------------
 

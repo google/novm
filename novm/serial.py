@@ -12,7 +12,6 @@ from . import virtio
 class Console(virtio.Device):
 
     virtio_driver = "console"
-    debug = True
 
     def __init__(
             self,

@@ -185,9 +185,9 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
                 &next)
 
             // Append our buffer.
-            has_next := (buf_flags & C.VirtioDescFNext) != C.__u16(0)
-            is_write := (buf_flags & C.VirtioDescFWrite) != C.__u16(0)
-            is_indirect := (buf_flags & C.VirtioDescFIndirect) != C.__u16(0)
+            has_next := (buf_flags & C.__u16(C.VirtioDescFNext)) != C.__u16(0)
+            is_write := (buf_flags & C.__u16(C.VirtioDescFWrite)) != C.__u16(0)
+            is_indirect := (buf_flags & C.__u16(C.VirtioDescFIndirect)) != C.__u16(0)
 
             // Do we have a buffer?
             if buf == nil {
