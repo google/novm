@@ -108,6 +108,8 @@ class NovmManager(object):
         """
         if vcpus is None:
             vcpus = 1
+        if read is None:
+            read = []
 
         args = ["novmm"]
         devices = []
@@ -127,10 +129,17 @@ class NovmManager(object):
         devices.append(basic.Acpi())
 
         # Add the kernel arguments.
+        # (Including the packed modules).
         args.extend(["-vmlinux", self._kernels.file(kernel, "vmlinux")])
         args.extend(["-sysmap", self._kernels.file(kernel, "sysmap")])
         args.extend(["-initrd", self._kernels.file(kernel, "initrd")])
         args.extend(["-setup", self._kernels.file(kernel, "setup")])
+
+        release = open(self._kernels.file(kernel, "release")).read().strip()
+        read.append("%s=>%s" % (
+            self._kernels.file(kernel, "modules"),
+            "/lib/modules/%s" % release,
+        ))
 
         # Use uart devices?
         if com1:
@@ -335,6 +344,8 @@ class NovmManager(object):
             shutil.copy(vmlinux, os.path.join(temp_dir, "vmlinux"))
             shutil.copy(sysmap, os.path.join(temp_dir, "sysmap"))
             shutil.copy(setup, os.path.join(temp_dir, "setup"))
+            shutil.copytree(modules, os.path.join(temp_dir, "modules"))
+            open(os.path.join(temp_dir, "release"), "w").write(release)
             utils.zipdir(temp_dir, output)
             return "file://%s" % os.path.abspath(output)
         finally:
