@@ -24,6 +24,7 @@ type Device interface {
     Interrupt() error
 
     Debug(format string, v ...interface{})
+    IsDebugging() bool
 }
 
 func (device *BaseDevice) Init(info *DeviceInfo) error {
@@ -51,9 +52,13 @@ func (device *BaseDevice) MmioHandlers() IoHandlers {
 }
 
 func (device *BaseDevice) Debug(format string, v ...interface{}) {
-    if device.info.Debug {
+    if device.IsDebugging() {
         log.Printf(device.Name()+": "+format, v...)
     }
+}
+
+func (device *BaseDevice) IsDebugging() bool {
+    return device.info.Debug
 }
 
 func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {

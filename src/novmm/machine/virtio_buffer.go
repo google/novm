@@ -98,7 +98,7 @@ func (buf *VirtioBuffer) Gather(
             offset -= len(data)
         } else if offset > 0 {
             ptrs = append(ptrs, unsafe.Pointer(&data[offset]))
-            if len(data)-offset > length {
+            if len(data)-offset >= length {
                 lens = append(lens, C.int(length))
                 length = 0
             } else {
@@ -108,7 +108,7 @@ func (buf *VirtioBuffer) Gather(
             offset = 0
         } else {
             ptrs = append(ptrs, unsafe.Pointer(&data[0]))
-            if len(data) > length {
+            if len(data) >= length {
                 lens = append(lens, C.int(length))
                 length = 0
             } else {
@@ -167,7 +167,8 @@ func (buf *VirtioBuffer) PWrite(
     return buf.doIO(fd, fd_offset, buf_offset, length, C.int(1))
 }
 
-func (buf *VirtioBuffer) Read(fd int,
+func (buf *VirtioBuffer) Read(
+    fd int,
     buf_offset int,
     length int) (int, error) {
 
@@ -206,6 +207,6 @@ func (buf *VirtioBuffer) Map(
     }
 
     // We never found the offset,
-    // give back an empty array.
-    return []byte{}
+    // give back nothing to indicate.
+    return nil
 }

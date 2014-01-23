@@ -690,7 +690,11 @@ func (virtio *VirtioDevice) SetFeatures(features uint32) {
 }
 
 func (virtio *VirtioDevice) HasFeatures(features uint32) bool {
-    return (uint32(virtio.GuestFeatures.Value) & features) == features
+    return (virtio.GetFeatures() & features) == features
+}
+
+func (virtio *VirtioDevice) GetFeatures() uint32 {
+    return uint32(virtio.GuestFeatures.Value & virtio.HostFeatures.Value)
 }
 
 func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {

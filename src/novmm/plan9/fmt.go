@@ -2,7 +2,6 @@
 // Copyright 2013 Adin Scannell.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the licenses/go9p file.
-
 package plan9
 
 import "fmt"
@@ -13,35 +12,27 @@ func permToString(perm uint32) string {
     if perm&DMDIR != 0 {
         ret += "d"
     }
-
     if perm&DMAPPEND != 0 {
         ret += "a"
     }
-
     if perm&DMAUTH != 0 {
         ret += "A"
     }
-
     if perm&DMEXCL != 0 {
         ret += "l"
     }
-
     if perm&DMTMP != 0 {
         ret += "t"
     }
-
     if perm&DMDEVICE != 0 {
         ret += "D"
     }
-
     if perm&DMSOCKET != 0 {
         ret += "S"
     }
-
     if perm&DMNAMEDPIPE != 0 {
         ret += "P"
     }
-
     if perm&DMSYMLINK != 0 {
         ret += "L"
     }
@@ -90,28 +81,40 @@ func (fc *Fcall) String() string {
     ret := ""
 
     switch fc.Type {
-    default:
-        ret = fmt.Sprintf("invalid call: %d", fc.Type)
     case Tversion:
-        ret = fmt.Sprintf("Tversion tag %d msize %d version '%s'", fc.Tag, fc.Msize, fc.Version)
+        ret = fmt.Sprintf(
+            "Tversion tag %d msize %d version '%s'",
+            fc.Tag, fc.Msize, fc.Version)
     case Rversion:
-        ret = fmt.Sprintf("Rversion tag %d msize %d version '%s'", fc.Tag, fc.Msize, fc.Version)
+        ret = fmt.Sprintf(
+            "Rversion tag %d msize %d version '%s'",
+            fc.Tag, fc.Msize, fc.Version)
     case Tauth:
-        ret = fmt.Sprintf("Tauth tag %d afid %d uname '%s' nuname %d aname '%s'",
+        ret = fmt.Sprintf(
+            "Tauth tag %d afid %d uname '%s' nuname %d aname '%s'",
             fc.Tag, fc.Afid, fc.Uname, fc.Unamenum, fc.Aname)
     case Rauth:
-        ret = fmt.Sprintf("Rauth tag %d aqid %v", fc.Tag, &fc.Qid)
+        ret = fmt.Sprintf(
+            "Rauth tag %d aqid %v", fc.Tag, &fc.Qid)
     case Rattach:
-        ret = fmt.Sprintf("Rattach tag %d aqid %v", fc.Tag, &fc.Qid)
+        ret = fmt.Sprintf(
+            "Rattach tag %d aqid %v", fc.Tag, &fc.Qid)
     case Tattach:
-        ret = fmt.Sprintf("Tattach tag %d fid %d afid %d uname '%s' nuname %d aname '%s'",
+        ret = fmt.Sprintf(
+            "Tattach tag %d fid %d afid %d uname '%s' nuname %d aname '%s'",
             fc.Tag, fc.Fid, fc.Afid, fc.Uname, fc.Unamenum, fc.Aname)
     case Tflush:
-        ret = fmt.Sprintf("Tflush tag %d oldtag %d", fc.Tag, fc.Oldtag)
+        ret = fmt.Sprintf(
+            "Tflush tag %d oldtag %d",
+            fc.Tag, fc.Oldtag)
     case Rerror:
-        ret = fmt.Sprintf("Rerror tag %d ename '%s' ecode %d", fc.Tag, fc.Error, fc.Errornum)
+        ret = fmt.Sprintf(
+            "Rerror tag %d ename '%s' ecode %d",
+            fc.Tag, fc.Error, fc.Errornum)
     case Twalk:
-        ret = fmt.Sprintf("Twalk tag %d fid %d newfid %d ", fc.Tag, fc.Fid, fc.Newfid)
+        ret = fmt.Sprintf(
+            "Twalk tag %d fid %d newfid %d ",
+            fc.Tag, fc.Fid, fc.Newfid)
         for i := 0; i < len(fc.Wname); i++ {
             ret += fmt.Sprintf("%d:'%s' ", i, fc.Wname[i])
         }
@@ -121,42 +124,86 @@ func (fc *Fcall) String() string {
             ret += fmt.Sprintf("%v ", &fc.Wqid[i])
         }
     case Topen:
-        ret = fmt.Sprintf("Topen tag %d fid %d mode %x", fc.Tag, fc.Fid, fc.Mode)
+        ret = fmt.Sprintf(
+            "Topen tag %d fid %d mode %x",
+            fc.Tag, fc.Fid, fc.Mode)
     case Ropen:
-        ret = fmt.Sprintf("Ropen tag %d qid %v iounit %d", fc.Tag, &fc.Qid, fc.Iounit)
+        ret = fmt.Sprintf(
+            "Ropen tag %d qid %v iounit %d",
+            fc.Tag, &fc.Qid, fc.Iounit)
     case Rcreate:
-        ret = fmt.Sprintf("Rcreate tag %d qid %v iounit %d", fc.Tag, &fc.Qid, fc.Iounit)
+        ret = fmt.Sprintf(
+            "Rcreate tag %d qid %v iounit %d",
+            fc.Tag, &fc.Qid, fc.Iounit)
     case Tcreate:
-        ret = fmt.Sprintf("Tcreate tag %d fid %d name '%s' perm ", fc.Tag, fc.Fid, fc.Name)
-        ret += permToString(fc.Perm)
-        ret += fmt.Sprintf(" mode %x ", fc.Mode)
+        ret = fmt.Sprintf(
+            "Tcreate tag %d fid %d name '%s' perm %s mode %x",
+            fc.Tag, fc.Fid, fc.Name, permToString(fc.Perm), fc.Mode)
     case Tread:
-        ret = fmt.Sprintf("Tread tag %d fid %d offset %d count %d", fc.Tag, fc.Fid, fc.Offset, fc.Count)
+        ret = fmt.Sprintf(
+            "Tread tag %d fid %d offset %d count %d",
+            fc.Tag, fc.Fid, fc.Offset, fc.Count)
     case Rread:
-        ret = fmt.Sprintf("Rread tag %d count %d", fc.Tag, fc.Count)
+        ret = fmt.Sprintf(
+            "Rread tag %d count %d",
+            fc.Tag, fc.Count)
     case Twrite:
-        ret = fmt.Sprintf("Twrite tag %d fid %d offset %d count %d", fc.Tag, fc.Fid, fc.Offset, fc.Count)
+        ret = fmt.Sprintf(
+            "Twrite tag %d fid %d offset %d count %d",
+            fc.Tag, fc.Fid, fc.Offset, fc.Count)
     case Rwrite:
-        ret = fmt.Sprintf("Rwrite tag %d count %d", fc.Tag, fc.Count)
+        ret = fmt.Sprintf(
+            "Rwrite tag %d count %d",
+            fc.Tag, fc.Count)
     case Tclunk:
-        ret = fmt.Sprintf("Tclunk tag %d fid %d", fc.Tag, fc.Fid)
+        ret = fmt.Sprintf(
+            "Tclunk tag %d fid %d",
+            fc.Tag, fc.Fid)
     case Rclunk:
-        ret = fmt.Sprintf("Rclunk tag %d", fc.Tag)
+        ret = fmt.Sprintf(
+            "Rclunk tag %d",
+            fc.Tag)
     case Tremove:
-        ret = fmt.Sprintf("Tremove tag %d fid %d", fc.Tag, fc.Fid)
+        ret = fmt.Sprintf(
+            "Tremove tag %d fid %d",
+            fc.Tag, fc.Fid)
     case Tstat:
-        ret = fmt.Sprintf("Tstat tag %d fid %d", fc.Tag, fc.Fid)
+        ret = fmt.Sprintf(
+            "Tstat tag %d fid %d",
+            fc.Tag, fc.Fid)
     case Rstat:
-        ret = fmt.Sprintf("Rstat tag %d st (%v)", fc.Tag, &fc.Dir)
+        ret = fmt.Sprintf(
+            "Rstat tag %d st (%v)",
+            fc.Tag, &fc.Dir)
     case Twstat:
-        ret = fmt.Sprintf("Twstat tag %d fid %d st (%v)", fc.Tag, fc.Fid, &fc.Dir)
+        ret = fmt.Sprintf(
+            "Twstat tag %d fid %d st (%v)",
+            fc.Tag, fc.Fid, &fc.Dir)
     case Rflush:
-        ret = fmt.Sprintf("Rflush tag %d", fc.Tag)
+        ret = fmt.Sprintf(
+            "Rflush tag %d",
+            fc.Tag)
     case Rremove:
-        ret = fmt.Sprintf("Rremove tag %d", fc.Tag)
+        ret = fmt.Sprintf(
+            "Rremove tag %d",
+            fc.Tag)
     case Rwstat:
-        ret = fmt.Sprintf("Rwstat tag %d", fc.Tag)
+        ret = fmt.Sprintf(
+            "Rwstat tag %d",
+            fc.Tag)
+    default:
+        ret = fmt.Sprintf(
+            "invalid call: %d",
+            fc.Type)
     }
 
     return ret
+}
+
+func (err *Error) Error() string {
+    if err != nil {
+        return fmt.Sprintf("%s: %d", err.Err, err.Errornum)
+    }
+
+    return ""
 }

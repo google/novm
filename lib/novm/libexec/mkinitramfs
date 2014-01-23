@@ -36,7 +36,7 @@ mknod -m 664 $WDIR/dev/null    c 1 3
 install -m0755 $(dirname $0)/init $WDIR/init
 
 # Copy our files.
-binfiles="cat ls sh sleep mount umount mkdir ln"
+binfiles="cat strace md5sum hexdump ls sh sleep mount umount mkdir ln"
 sbinfiles="modprobe switch_root"
 
 if [ -x /bin/kmod ] ; then
@@ -123,12 +123,6 @@ find $MOD_PATH \
     -o -name 9p.ko \
     -o -name 9pnet.ko \
     -o -name 9pnet_virtio.ko \
-    -o -name jbd2.ko \
-    -o -name mbcache.ko \
-    -o -name crc16.ko \
-    -o -name ext2.ko \
-    -o -name ext3.ko \
-    -o -name ext4.ko \
     | expand_modules \
     | cpio --make-directories -p --quiet $WDIR
 

@@ -2,45 +2,44 @@
 // Copyright 2013 Adin Scannell.  All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the licenses/go9p file.
-
 package plan9
 
 import (
-    "fmt"
+    "log"
 )
 
 // Creates a Fcall value from the on-the-wire representation. If
 // dotu is true, reads 9P2000.u messages. Returns the unpacked message,
 // error and how many bytes from the buffer were used by the message.
-func Unpack(buf []byte, dotu bool) (fc *Fcall, err error, fcsz int) {
+func Unpack(
+    buf Buffer,
+    dotu bool) (*Fcall, error) {
+
     var m uint16
 
-    if len(buf) < 7 {
-        return nil, &Error{"buffer too short", EINVAL}, 0
+    // Enough for a header?
+    if buf.ReadLeft() < 7 {
+        log.Printf("buffer smaller than header?")
+        return nil, BufferInsufficient
     }
 
-    fc = new(Fcall)
+    fc := new(Fcall)
     fc.Fid = NOFID
     fc.Afid = NOFID
     fc.Newfid = NOFID
 
-    p := buf
-    fc.Size, p = gint32(p)
-    fc.Type, p = gint8(p)
-    fc.Tag, p = gint16(p)
+    fc.Size = buf.Read32()
+    fc.Type = buf.Read8()
+    fc.Tag = buf.Read16()
 
-    if int(fc.Size) > len(buf) || fc.Size < 7 {
-        return nil, &Error{fmt.Sprintf("buffer too short: %d expected %d",
-                len(buf), fc.Size),
-                EINVAL},
-            0
+    // Sanity check the size.
+    if int(fc.Size)-7 > buf.ReadLeft() || fc.Size < 7 {
+        log.Printf("size is smaller than header?")
+        return nil, BufferInsufficient
     }
 
-    p = p[0 : fc.Size-7]
-    fc.Pkt = buf[0:fc.Size]
-    fcsz = int(fc.Size)
     if fc.Type < Tversion || fc.Type >= Tlast {
-        return nil, &Error{"invalid id", EINVAL}, 0
+        return nil, InvalidMessage
     }
 
     var sz uint32
@@ -51,36 +50,24 @@ func Unpack(buf []byte, dotu bool) (fc *Fcall, err error, fcsz int) {
     }
 
     if fc.Size < sz {
-        goto szerror
+        log.Printf("buffer doesn't match size?")
+        return nil, BufferInsufficient
     }
 
-    err = nil
+    var err error
     switch fc.Type {
-    default:
-        return nil, &Error{"invalid message id", EINVAL}, 0
-
     case Tversion, Rversion:
-        fc.Msize, p = gint32(p)
-        fc.Version, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
+        fc.Msize = buf.Read32()
+        fc.Version = buf.ReadString()
 
     case Tauth:
-        fc.Afid, p = gint32(p)
-        fc.Uname, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
-
-        fc.Aname, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
+        fc.Afid = buf.Read32()
+        fc.Uname = buf.ReadString()
+        fc.Aname = buf.ReadString()
 
         if dotu {
-            if len(p) > 0 {
-                fc.Unamenum, p = gint32(p)
+            if buf.ReadLeft() > 0 {
+                fc.Unamenum = buf.Read32()
             } else {
                 fc.Unamenum = NOUID
             }
@@ -89,138 +76,108 @@ func Unpack(buf []byte, dotu bool) (fc *Fcall, err error, fcsz int) {
         }
 
     case Rauth, Rattach:
-        p = gqid(p, &fc.Qid)
+        gqid(buf, &fc.Qid)
 
     case Tflush:
-        fc.Oldtag, p = gint16(p)
+        fc.Oldtag = buf.Read16()
 
     case Tattach:
-        fc.Fid, p = gint32(p)
-        fc.Afid, p = gint32(p)
-        fc.Uname, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
-
-        fc.Aname, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
+        fc.Fid = buf.Read32()
+        fc.Afid = buf.Read32()
+        fc.Uname = buf.ReadString()
+        fc.Aname = buf.ReadString()
 
         if dotu {
-            if len(p) > 0 {
-                fc.Unamenum, p = gint32(p)
+            if buf.ReadLeft() > 0 {
+                fc.Unamenum = buf.Read32()
             } else {
                 fc.Unamenum = NOUID
             }
         }
 
     case Rerror:
-        fc.Error, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
+        fc.Error = buf.ReadString()
         if dotu {
-            fc.Errornum, p = gint32(p)
+            fc.Errornum = buf.Read32()
         } else {
             fc.Errornum = 0
         }
 
     case Twalk:
-        fc.Fid, p = gint32(p)
-        fc.Newfid, p = gint32(p)
-        m, p = gint16(p)
+        fc.Fid = buf.Read32()
+        fc.Newfid = buf.Read32()
+        m = buf.Read16()
         fc.Wname = make([]string, m)
         for i := 0; i < int(m); i++ {
-            fc.Wname[i], p = gstr(p)
-            if p == nil {
-                goto szerror
-            }
+            fc.Wname[i] = buf.ReadString()
         }
 
     case Rwalk:
-        m, p = gint16(p)
-        fc.Wqid = make([]Qid, m)
-        for i := 0; i < int(m); i++ {
-            p = gqid(p, &fc.Wqid[i])
+        count := buf.Read16()
+        fc.Wqid = make([]Qid, count)
+        for i := 0; i < int(count); i++ {
+            gqid(buf, &fc.Wqid[i])
         }
 
     case Topen:
-        fc.Fid, p = gint32(p)
-        fc.Mode, p = gint8(p)
+        fc.Fid = buf.Read32()
+        fc.Mode = buf.Read8()
 
     case Ropen, Rcreate:
-        p = gqid(p, &fc.Qid)
-        fc.Iounit, p = gint32(p)
+        gqid(buf, &fc.Qid)
+        fc.Iounit = buf.Read32()
+        fc.Fid = buf.Read32()
+        fc.Mode = buf.Read8()
 
     case Tcreate:
-        fc.Fid, p = gint32(p)
-        fc.Name, p = gstr(p)
-        if p == nil {
-            goto szerror
-        }
-        fc.Perm, p = gint32(p)
-        fc.Mode, p = gint8(p)
+        fc.Fid = buf.Read32()
+        fc.Name = buf.ReadString()
+        fc.Perm = buf.Read32()
+        fc.Mode = buf.Read8()
         if dotu {
-            fc.Ext, p = gstr(p)
-            if p == nil {
-                goto szerror
-            }
+            fc.Ext = buf.ReadString()
         }
 
     case Tread:
-        fc.Fid, p = gint32(p)
-        fc.Offset, p = gint64(p)
-        fc.Count, p = gint32(p)
+        fc.Fid = buf.Read32()
+        fc.Offset = buf.Read64()
+        fc.Count = buf.Read32()
 
     case Rread:
-        fc.Count, p = gint32(p)
-        if len(p) < int(fc.Count) {
-            goto szerror
-        }
-        fc.Data = p
-        p = p[fc.Count:]
+        fc.Count = buf.Read32()
+        buf.ReadBytes(int(fc.Count))
 
     case Twrite:
-        fc.Fid, p = gint32(p)
-        fc.Offset, p = gint64(p)
-        fc.Count, p = gint32(p)
-        if len(p) != int(fc.Count) {
-            fc.Data = make([]byte, fc.Count)
-            copy(fc.Data, p)
-            p = p[len(p):]
-        } else {
-            fc.Data = p
-            p = p[fc.Count:]
-        }
+        fc.Fid = buf.Read32()
+        fc.Offset = buf.Read64()
+        fc.Count = buf.Read32()
 
     case Rwrite:
-        fc.Count, p = gint32(p)
+        fc.Count = buf.Read32()
 
     case Tclunk, Tremove, Tstat:
-        fc.Fid, p = gint32(p)
+        fc.Fid = buf.Read32()
 
     case Rstat:
-        m, p = gint16(p)
-        p = gstat(p, &fc.Dir, dotu)
-        if p == nil {
-            goto szerror
-        }
+        fc.Fid = buf.Read32()
+        gstat(buf, &fc.Dir, dotu)
 
     case Twstat:
-        fc.Fid, p = gint32(p)
-        m, p = gint16(p)
-        p = gstat(p, &fc.Dir, dotu)
+        fc.Fid = buf.Read32()
+        m = buf.Read16()
+        gstat(buf, &fc.Dir, dotu)
 
     case Rflush, Rclunk, Rremove, Rwstat:
+        break
+
+    default:
+        return nil, InvalidMessage
     }
 
-    if len(p) > 0 {
-        goto szerror
+    if buf.ReadLeft() < 0 {
+        log.Printf("buffer overun?")
+        return nil, BufferInsufficient
     }
 
-    return
-
-szerror:
-    return nil, &Error{"invalid size", EINVAL}, 0
+    return fc, err
 }

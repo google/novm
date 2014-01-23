@@ -1,4 +1,10 @@
 #!/bin/bash
 
+if [ "$#" -gt "0" ]; then
+    RELEASE=$1
+else
+    RELEASE=$(uname -r)
+fi
+
 DIRNAME=$(dirname $0)
-$DIRNAME/novm getkernel --url $($DIRNAME/novm mkkernel)
+$DIRNAME/novm getkernel --url $($DIRNAME/novm mkkernel --release=$RELEASE)

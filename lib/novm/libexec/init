@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Small victory.
+echo "~~~ NOVM ~~~" >/dev/kmsg
+
 # Mount proc, etc.
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -7,37 +10,37 @@ mount -t devtmpfs devtmpfs /dev
 mount -t tmpfs tmpfs /run
 mount -t devpts devpts /dev/pts
 
-# Parse our command line arguments.
-# Critically this will include information
-# about attached devices, IP addresses, etc.
-for x in $(cat /proc/cmdline); do
-    case $x in
-    init=*)
-        init=${x#init=}
-        ;;
-    esac
-done
-
-# Try logging.
-echo "Initial ramdisk running..." > /dev/kmsg
-
 # Load all virt-io modules.
+modprobe virtio
+modprobe virtio-ring
 modprobe virtio-pci
 modprobe virtio-net
 modprobe virtio-blk
 modprobe virtio-console
 modprobe 9pnet_virtio
 modprobe 9p
-modprobe ext4
 
-# Shell...
-echo "Entering interactive shell..." > /dev/hvc0
-/bin/sh -i < /dev/hvc0 > /dev/hvc0 2>&1
+# Mount our root context.
+mkdir -p /sysroot
+mount -t 9p -o trans=virtio,version=9p2000.u,rw root /sysroot
 
-# Run our root.
-mkdir -p /sysroot 2>/dev/kmsg
-mount -t ext4 /dev/vda /sysroot 2>/dev/kmsg
-exec switch_root /sysroot sbin/init < /dev/hvc0 > /dev/hvc0 2>&1
+# Mount our init context.
+mkdir -p /sysinit
+mount -t 9p -o trans=virtio,version=9p2000.u,ro init /sysinit
+
+# Parse our command line arguments.
+# We push all possible actions (IP addrs, etc.)
+# to the RPC channel, but debugging it's useful
+# to be able to to fire up a shell from the init.
+shell=n
+for x in $(cat /proc/cmdline); do
+    case $x in
+    shell)
+        echo "Running interactive shell..." >/dev/kmsg
+        sh -i < /dev/hvc0 > /dev/hvc0
+        ;;
+    esac
+done
 
 # Execute our noinit process.
 #
@@ -47,4 +50,4 @@ exec switch_root /sysroot sbin/init < /dev/hvc0 > /dev/hvc0 2>&1
 # The second thing it will do is open
 # the virtIO console and become an RPC
 # server for the backend. Yeehaw!
-exec /sysroot/noguest -pivot_root /root
+exec /sysinit/init -pivot_root /sysroot 2>/dev/kmsg

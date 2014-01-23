@@ -66,7 +66,7 @@ def cleanup(fcn=None, *args, **kwargs):
                 fcn(*args, **kwargs)
             os._exit(0)
 
-def zipdir(path, output, include=None, exclude=None):
+def packdir(path, output, include=None, exclude=None):
     if include is None:
         include = ()
     if exclude is None:
@@ -96,11 +96,15 @@ def zipdir(path, output, include=None, exclude=None):
 
     return zipf
 
+def unpackdir(path, output):
+    zipf = zipfile.ZipFile(path)
+    zipf.extractall(output)
+
 def libexec(name):
     bindir = os.path.dirname(sys.argv[0])
     binname = os.path.basename(sys.argv[0])
     libexec_dir = os.path.join(bindir, "..", "lib", binname, "libexec")
-    return os.path.join(libexec_dir, name)
+    return os.path.abspath(os.path.join(libexec_dir, name))
 
 def asbool(value):
     if value is None:

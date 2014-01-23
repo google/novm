@@ -3,6 +3,7 @@ package machine
 import (
     "bytes"
     "encoding/json"
+    "log"
 )
 
 type DeviceInfo struct {
@@ -48,6 +49,7 @@ func (info DeviceInfo) Load() (Device, error) {
         // This will override all the default
         // settings in the initialized object.
         json_decoder := json.NewDecoder(buffer)
+        log.Printf("Loading %s...", device.Name())
         err = json_decoder.Decode(device)
         if err != nil {
             return nil, err

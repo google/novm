@@ -108,6 +108,8 @@ class NovmManager(object):
         """
         if vcpus is None:
             vcpus = 1
+        if pack is None:
+            pack = []
         if read is None:
             read = []
 
@@ -134,12 +136,7 @@ class NovmManager(object):
         args.extend(["-sysmap", self._kernels.file(kernel, "sysmap")])
         args.extend(["-initrd", self._kernels.file(kernel, "initrd")])
         args.extend(["-setup", self._kernels.file(kernel, "setup")])
-
         release = open(self._kernels.file(kernel, "release")).read().strip()
-        read.append("%s=>%s" % (
-            self._kernels.file(kernel, "modules"),
-            "/lib/modules/%s" % release,
-        ))
 
         # Use uart devices?
         if com1:
@@ -180,9 +177,37 @@ class NovmManager(object):
             for (index, disk) in zip(range(len(disk)), disk)
         ])
 
+        # Add modules.
+        if os.path.exists(self._kernels.file(kernel, "modules")):
+            read.append(
+                "/lib/modules/%s=>%s" % (
+                    release,
+                    self._kernels.file(kernel, "modules")
+                )
+            )
+
+        # Add our packs.
+        # NOTE: All packs are given relative to root.
+        for p in pack:
+            read.append(self._packs.file(p))
+
+        # The root filesystem.
+        devices.append(fs.FS(
+            pci=not(nopci),
+            tag="root",
+            read=read,
+            write=write))
+
+        # Our init.
+        devices.append(fs.FS(
+            pci=not(nopci),
+            tag="init",
+            read=["/init=>%s" % utils.libexec("noguest")]
+        ))
+
         # Enable user-memory.
         devices.append(memory.UserMemory(
-            size=1024*1024*(memsize or 64)))
+            size=1024*1024*(memsize or 1024)))
 
         # Save metadata.
         info = {
@@ -261,7 +286,7 @@ class NovmManager(object):
             output = tempfile.mktemp()
         if path is None:
             path = os.getcwd()
-        utils.zipdir(path, output, exclude=exclude, include=include)
+        utils.packdir(path, output, exclude=exclude, include=include)
         return "file://%s" % os.path.abspath(output)
 
     def rmpack(self,
@@ -344,9 +369,10 @@ class NovmManager(object):
             shutil.copy(vmlinux, os.path.join(temp_dir, "vmlinux"))
             shutil.copy(sysmap, os.path.join(temp_dir, "sysmap"))
             shutil.copy(setup, os.path.join(temp_dir, "setup"))
-            shutil.copytree(modules, os.path.join(temp_dir, "modules"))
+            #shutil.copytree(modules, os.path.join(temp_dir, "modules"))
+            os.makedirs(os.path.join(temp_dir, "modules"))
             open(os.path.join(temp_dir, "release"), "w").write(release)
-            utils.zipdir(temp_dir, output)
+            utils.packdir(temp_dir, output)
             return "file://%s" % os.path.abspath(output)
         finally:
             shutil.rmtree(temp_dir)

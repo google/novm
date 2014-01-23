@@ -33,6 +33,9 @@ func (device *VirtioConsoleDevice) dumpConsole(
     fd int,
     read bool) error {
 
+    // Make sure this fd is not blocking.
+    syscall.SetNonblock(fd, false)
+
     // NOTE: This is just an example of how to
     // use a virtio device for the moment. This
     // will be done more rigorously shortly.
@@ -170,6 +173,7 @@ func (device *VirtioConsoleDevice) ctrlConsole(
 
 func setupConsole(device *VirtioDevice) (Device, error) {
 
+    // Set our features.
     device.SetFeatures(VirtioConsoleFMultiPort)
 
     device.Config.GrowTo(8)
@@ -207,10 +211,6 @@ func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error 
     if err != nil {
         return err
     }
-
-    // Make sure our FDs are not blocking.
-    syscall.SetNonblock(0, false)
-    syscall.SetNonblock(1, false)
 
     // Start our console process.
     go console.dumpConsole(console.Channels[0], 0, true)

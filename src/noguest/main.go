@@ -59,6 +59,9 @@ func main() {
     // Parse flags.
     flag.Parse()
 
+    // Small victory.
+    log.Printf("~~~ NOGUEST ~~~")
+
     // Pivot root if necessary.
     if *pivot_root != "" {
         err := pivotRoot(*pivot_root)

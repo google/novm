@@ -6,11 +6,12 @@ This is the simplest possible file database.
 import os
 import json
 import tempfile
-import zipfile
 import shutil
 import urllib2
 import hashlib
 import time
+
+from . import utils
 
 class Nodb(object):
 
@@ -101,8 +102,7 @@ class Nodb(object):
             os.makedirs(obj_path)
 
             # Extract it.
-            zipf = zipfile.ZipFile(tf.name)
-            zipf.extractall(obj_path)
+            utils.unpackdir(tf.name, obj_path)
 
         # Save the path.
         self.add(obj_id, obj)

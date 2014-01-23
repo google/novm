@@ -1,7 +1,11 @@
 """
 Filesystem device functions.
 """
+import uuid
+import tempfile
+import shutil
 
+from . import utils
 from . import virtio
 
 class FS(virtio.Device):
@@ -10,54 +14,49 @@ class FS(virtio.Device):
 
     def __init__(
             self,
-            pack=None,
+            tag=None,
             read=None,
             write=None,
             **kwargs):
 
         super(FS, self).__init__(**kwargs)
 
+        if tag is None:
+            tag = str(uuid.uuid4())
         if read is None:
             read = []
         if write is None:
             write = []
 
+        # Save our tag.
+        self._tag = tag
+
         # Append our read mapping.
-        read_info = {'/':[]}
+        self._read = {'/': []}
         for path in read:
             spec = path.split("=>", 1)
             if len(spec) == 1:
-                read_info['/'].append(path)
+                self._read['/'].append(path)
             else:
-                read_info[spec[1]].append(spec[0])
-        for p in pack:
-            path = self._packs.file(p)
-            read_info['/'].append(path)
-
-        args.append("-readfs=%s" % json.dumps(read_info))
+                if not spec[0] in self._read:
+                    self._read[spec[0]] = []
+                self._read[spec[0]].append(spec[1])
 
         # Append our write mapping.
         tempdir = tempfile.mkdtemp()
         utils.cleanup(shutil.rmtree, tempdir)
-        write_info = {'/': [tempdir]}
+        self._write = {'/': tempdir}
 
         for path in write:
             spec = path.split("=>", 1)
             if len(spec) == 1:
-                write_info['/'].append(path)
+                self._write['/'] = path
             else:
-                write_info[spec[1]].append(spec[0])
+                self._write[spec[1]] = spec[0]
 
-        args.append("-writefs=%s" % json.dumps(write_info))
-
-        # Save our arguments.
-        self._info = {
-            "device": device,
-            "filename": filename,
+    def data(self):
+        return {
+            "read": self._read,
+            "write": self._write,
+            "tag": self._tag,
         }
-
-        # Open the device.
-        self._file = open(filename, 'w+b')
-
-    def info(self):
-        return self._info
