@@ -4,7 +4,7 @@ novm
 *novm* is a legacy-free, type 2 hypervisor written in Go. Its goal is to
 provide an alternate, high-performance Linux hypervisor for cloud workloads.
 
-*novm* is powerful because it exposes a filesystem-device as a primary
+*novm* is unique because it exposes a filesystem-device as a primary
 mechanism for running guests. This allows you to easily manage independent
 software and data bundles independently and combine them into a single virtual
 machine instance.
@@ -27,6 +27,88 @@ support for legacy hardware and most emulation. This makes it inappropriate
 for running legacy applications, but ideal for modern cloud-based virtualization
 use cases. *novm* was originally called *pervirt*, but this name was changed
 after it was suggested that this name *could* be misconstrued.
+
+*novm* aims to provide the best of both containers and hardware virtualization.
+
+What are the advantages over containers?
+----------------------------------------
+
+* You can run any compatible kernel.
+
+You have much more freedom as a result of the fact that the
+guest kernel is decoupled from the host.
+
+For example: You can hold back your guest kernel if necessary,
+or upgrade to the latest and greatest. Combined with migration,
+you can have a stable, long-running guest while still applying
+critical fixes and updates to the hosts. If you need filesystem
+or networking modules, you can freely load them in a guest. If
+a particular application requires a specific kernel, it's very
+straight-forward to use it.
+
+* You have real, hardware-enforced isolation.
+
+The only interface exposed is the x86 ABI and the hypervisor.
+Containers are more likely to suffer from security holes as the
+guest can access the entire kernel system call interface.
+
+In multi-tenant environments, strong isolation is very important.
+Beyond security holes, containers likely present countless
+opportunities for subtle information leaks between guest instances.
+
+* You can mix and match technologies.
+
+Want a docker-style *novm*? Want a disk-based *novm*? Sure.
+Both co-exist easily and use resources in the same way. There's
+no need to manage two separate networking systems, bridges,
+management daemons, etc. Everything is managed in one way.
+
+What are the disadvantages over containers?
+-------------------------------------------
+
+* Performance.
+
+Okay, so there's a tiny hit. If your workload is very I/O
+intensive (massive disk or network usage), you will see a small
+but measurable drop in performance. But most workloads will not
+see a difference.
+
+What are the advantages over traditional virtualization?
+--------------------------------------------------------
+
+* Performance.
+
+*novm* is built from the ground-up to be as simple and fast
+as possible. It aims to be highly concurrent and highly scalable
+for running large, next-generation cloud workloads. Traditional
+virtualization platforms have placed an emphasis on compatibility
+first, then on performance. (Not to say they aren't amazing.)
+
+* File-based provisioning.
+
+Instead of opaque disk images, *novm* allows you to easily
+combine directory trees to create a VM in real-time. This allows
+an administrator to very easily tweak files and fire up VMs
+without dealing with the headaches of converting disk images or
+using proprietary tools.
+
+What are the disadvantages over traditional virtualization?
+-----------------------------------------------------------
+
+* Legacy hardware support.
+
+We only support a very limited number of devices. This means
+that guests must be VirtIO-aware and not depend on the presence
+of any BIOS functionality post-boot.
+
+For new workloads, this isn't a problem. But it means you can't
+migrate your untouchable, ancient IT system over to *novm*.
+
+* Arbitrary guest OS support.
+
+*novm* only supports the guests we know how to boot. For
+the time being, that means Linux only. It would be straight
+forward to add support for multiboot guests, like FreeBSD.
 
 Requirements
 ------------
