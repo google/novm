@@ -20,14 +20,14 @@ def cleanup(fcn=None, *args, **kwargs):
         # This will only exit when the parent dies,
         # we will not run any function. This will be
         # used generally as the subprocess preexec_fn.
-        parent_pid = os.getppid()
         child_pid = 0
+        parent_pid = os.getppid()
     else:
         # Fork a child process.
         # This child process will execute the given code
         # when its parent dies. It's normally used inline.
-        parent_pid = os.getpid()
         child_pid = os.fork()
+        parent_pid = os.getppid()
 
     if child_pid == 0:
         # Cause a TERM to be handled as an exit.
@@ -55,13 +55,12 @@ def cleanup(fcn=None, *args, **kwargs):
             null = open("/dev/null", "w+")
             os.dup2(null.fileno(), 0)
             os.dup2(null.fileno(), 1)
-            os.dup2(null.fileno(), 2)
 
             # Wait for the exit.
             while True:
                 signal.pause()
 
-        except SystemExit:
+        except (SystemExit, KeyboardInterrupt):
             if fcn is not None:
                 fcn(*args, **kwargs)
             os._exit(0)
