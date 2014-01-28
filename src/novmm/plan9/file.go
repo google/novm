@@ -596,6 +596,12 @@ func (file *File) children(fs *Fs, dirpath string) ([]*Dir, error) {
             return nil, err
         }
 
+        // Deleted?
+        if !child.exists() {
+            child.DecRef(fs, child_path)
+            continue
+        }
+
         // Get the stat.
         child_dir, err := child.dir(name, true)
         child.DecRef(fs, child_path)
