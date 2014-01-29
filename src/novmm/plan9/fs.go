@@ -312,7 +312,7 @@ func (fs *Fs) Handle(req Buffer, resp Buffer, debug bool) error {
             err = PackRremove(resp, fcall.Tag)
         }
         if err == nil {
-            fs.removePost(fid)
+            err = fs.removePost(fid)
         }
 
     case Tstat:
@@ -349,6 +349,23 @@ done:
 
         // Print our result.
         log.Printf("resp: Fcall <- %s", rcall.String())
+    }
+
+    if debug {
+        fs.fidLock.Lock()
+        fs.fileLock.Lock()
+        for fidno, fid := range fs.Fidpool {
+            log.Printf(
+                "  fidno %d: %d refs (%s)",
+                fidno, fid.Refs, fid.file)
+        }
+        for path, file := range fs.files {
+            log.Printf(
+                "  file %d: %s => %d refs",
+                file.Qid.Path, path, file.refs)
+        }
+        fs.fidLock.Unlock()
+        fs.fileLock.Unlock()
     }
 
     // All good.

@@ -183,10 +183,9 @@ func (fs *Fs) create(
         return nil, nil, 0, Enotdir
     }
 
-    // Can't open directories for other than reading.
-    if (perm&DMDIR) != 0 && mode != OREAD {
-        return nil, nil, 0, Eperm
-    }
+    // FIXME: We currently ignore permissions on
+    // this directory. We should be checking that
+    // this user can write to this directory.
 
     // Can't create special files if not 9P2000.u */
     if (perm&(DMNAMEDPIPE|DMSYMLINK|DMLINK|DMDEVICE|DMSOCKET)) != 0 && !fs.Dotu {
@@ -207,14 +206,15 @@ func (fs *Fs) create(
     }
 
     // Let's actually create the file.
-    new_file, err := fs.lookup(path.Join(fid.Path, name))
+    new_path := path.Join(fid.Path, name)
+    new_file, err := fs.lookup(new_path)
     if err != nil {
         if new_file != nil {
             new_file.DecRef(fs, path.Join(fid.Path, name))
         }
         return nil, nil, 0, err
     }
-    err = new_file.create(fs, fid.Path, file_mode)
+    err = new_file.create(fs, new_path, file_mode)
     if err != nil {
         new_file.DecRef(fs, path.Join(fid.Path, name))
         return nil, nil, 0, err
@@ -226,13 +226,13 @@ func (fs *Fs) create(
 
 func (fs *Fs) createPost(
     fid *Fid,
-    file *File,
+    new_file *File,
     name string,
     mode uint8) {
 
     // Swap out the files.
     fid.file.DecRef(fs, fid.Path)
-    fid.file = file
+    fid.file = new_file
 
     fid.Omode = mode
     fid.Opened = true
@@ -244,8 +244,10 @@ func (fs *Fs) createFail(
     name string,
     mode uint8) {
 
-    // Drop the new file.
-    file.DecRef(fs, path.Join(fid.Path, name))
+    if file != nil {
+        // Drop the new file.
+        file.DecRef(fs, path.Join(fid.Path, name))
+    }
 }
 
 func (fs *Fs) readDir(
@@ -360,13 +362,27 @@ func (fs *Fs) clunkPost(fid *Fid) {
 }
 
 func (fs *Fs) remove(fid *Fid) error {
+
+    // It seems that we universally drop
+    // a reference to the Fid here. The handler
+    // maintains a single reference to the Fid,
+    // so this will cause it disappear regardless
+    // of whether an error occurs or not. This
+    // appears to be the correct behaviour.
+    fid.DecRef(fs)
+
     return nil
 }
 
-func (fs *Fs) removePost(fid *Fid) {
+func (fs *Fs) removePost(fid *Fid) error {
 
     // Unlink if the file is there.
-    fid.file.remove()
+    err := fid.file.remove()
+    if err != nil {
+        return err
+    }
+
+    return err
 }
 
 func (fs *Fs) stat(fid *Fid) (*Dir, error) {

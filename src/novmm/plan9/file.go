@@ -186,6 +186,11 @@ func (file *File) findPaths(fs *Fs, filepath string) {
 
 func (fs *Fs) lookup(path string) (*File, error) {
 
+    // Normalize path.
+    if len(path) > 0 && path[len(path)-1] == "/"[0] {
+        path = path[:len(path)-1]
+    }
+
     fs.fileLock.RLock()
     file, ok := fs.files[path]
     if ok {
@@ -227,6 +232,13 @@ func (file *File) unlink() error {
     // Remove whatever was there.
     // NOTE: We will generally require the
     // write lock to be held for this routine.
+
+    if file.write_deleted {
+        err := cleardelattr(file.write_path)
+        if err != nil {
+            return err
+        }
+    }
 
     var stat syscall.Stat_t
     err := syscall.Stat(file.write_path, &stat)
@@ -271,15 +283,15 @@ func (file *File) remove() error {
         return err
     }
 
-    // We're deleted.
-    file.write_exists = true
-    file.write_deleted = true
-
-    // Mark this file as deleted with an extended attribute.
+    // Mark this file as deleted.
     err = setdelattr(file.write_path)
     if err != nil {
         return err
     }
+
+    // We're deleted.
+    file.write_exists = true
+    file.write_deleted = true
 
     return nil
 }
@@ -319,20 +331,24 @@ func (file *File) create(
 
         // Make all the super directories.
         basedir, _ := filepath.Split(path)
-        parent, err := fs.lookup(basedir)
-        if err != nil {
-            file.RWMutex.Unlock()
-            return err
+
+        if basedir != path {
+            parent, err := fs.lookup(basedir)
+            if err != nil {
+                file.RWMutex.Unlock()
+                return err
+            }
+
+            // The parent must have had
+            // a valid mode set at some point.
+            // We ignore this error, as this
+            // may actually return Eexist.
+            parent.create(fs, basedir, parent.mode)
+            parent.DecRef(fs, basedir)
         }
 
-        // The parent must have had
-        // a valid mode set at some point.
-        // We ignore this error, as this
-        // may actually return Eexist.
-        parent.create(fs, basedir, parent.mode)
-
         // Make this directory.
-        err = syscall.Mkdir(file.write_path, mode)
+        err := syscall.Mkdir(file.write_path, mode)
         if err != nil {
             file.RWMutex.Unlock()
             return err
@@ -366,6 +382,7 @@ func (file *File) create(
     if did_exist {
         return Eexist
     }
+
     return nil
 }
 
