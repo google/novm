@@ -255,8 +255,10 @@ class NovmManager(object):
                 continue
             legit_instances.append(instance)
         rval = self._instances.show()
-        if not devices and "devices" in rval:
-            del rval["devices"]
+        if not devices:
+            for value in rval.values():
+                if "devices" in value:
+                    del value["devices"]
         return rval
 
     def packs(self):
