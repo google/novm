@@ -20,8 +20,14 @@ class Console(virtio.Device):
 
         super(Console, self).__init__(**kwargs)
 
+        try:
+            os.makedirs("/var/run/novm")
+        except OSError:
+            # Exists.
+            pass
+
         if path is None:
-            path = "/var/run/%s.sock" % os.getpid()
+            path = "/var/run/novm/%s.console" % os.getpid()
 
         # Save our arguments.
         self._info = {
@@ -32,7 +38,7 @@ class Console(virtio.Device):
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         if os.path.exists(path):
             os.remove(path)
-        utils.cleanup(shutil.rmtree, path)
+        utils.cleanup(os.remove, path)
         self._sock.bind(path)
         self._sock.listen(1)
 
