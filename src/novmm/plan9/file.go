@@ -262,7 +262,9 @@ func (file *File) unlink() error {
     return nil
 }
 
-func (file *File) remove() error {
+func (file *File) remove(
+    fs *Fs,
+    path string) error {
 
     file.RWMutex.Lock()
     defer file.RWMutex.Unlock()
@@ -270,6 +272,13 @@ func (file *File) remove() error {
     // Unlink what's there.
     err := file.unlink()
     if err != nil {
+        return err
+    }
+
+    // Make sure the parent exists.
+    err = file.makeTree(fs, path)
+    if err != nil {
+        file.RWMutex.Unlock()
         return err
     }
 
@@ -302,6 +311,30 @@ func (file *File) exists() bool {
         (file.read_exists || file.write_exists))
 }
 
+func (file *File) makeTree(
+    fs *Fs,
+    path string) error {
+
+    // Make all the super directories.
+    basedir, _ := filepath.Split(path)
+
+    if basedir != path {
+        parent, err := fs.lookup(basedir)
+        if err != nil {
+            return err
+        }
+
+        // The parent must have had
+        // a valid mode set at some point.
+        // We ignore this error, as this
+        // may actually return Eexist.
+        parent.create(fs, basedir, parent.mode)
+        parent.DecRef(fs, basedir)
+    }
+
+    return nil
+}
+
 func (file *File) create(
     fs *Fs,
     path string,
@@ -329,26 +362,15 @@ func (file *File) create(
             }
         }
 
-        // Make all the super directories.
-        basedir, _ := filepath.Split(path)
-
-        if basedir != path {
-            parent, err := fs.lookup(basedir)
-            if err != nil {
-                file.RWMutex.Unlock()
-                return err
-            }
-
-            // The parent must have had
-            // a valid mode set at some point.
-            // We ignore this error, as this
-            // may actually return Eexist.
-            parent.create(fs, basedir, parent.mode)
-            parent.DecRef(fs, basedir)
+        // Make sure the parent exists.
+        err := file.makeTree(fs, path)
+        if err != nil {
+            file.RWMutex.Unlock()
+            return err
         }
 
         // Make this directory.
-        err := syscall.Mkdir(file.write_path, mode)
+        err = syscall.Mkdir(file.write_path, mode)
         if err != nil {
             file.RWMutex.Unlock()
             return err
@@ -366,16 +388,25 @@ func (file *File) create(
         file.RWMutex.Unlock()
 
     } else {
+        // Make sure the parent exists.
+        err := file.makeTree(fs, path)
+        if err != nil {
+            file.RWMutex.Unlock()
+            return err
+        }
+
         file.RWMutex.Unlock()
-        err := file.lockWrite(0, 0)
+        err = file.lockWrite(0, 0)
         if err != nil {
             return err
         }
+
         err = file.fillType(file.write_path)
         if err != nil {
             file.unlock()
             return err
         }
+
         file.unlock()
     }
 

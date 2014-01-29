@@ -377,12 +377,7 @@ func (fs *Fs) remove(fid *Fid) error {
 func (fs *Fs) removePost(fid *Fid) error {
 
     // Unlink if the file is there.
-    err := fid.file.remove()
-    if err != nil {
-        return err
-    }
-
-    return err
+    return fid.file.remove(fs, fid.Path)
 }
 
 func (fs *Fs) stat(fid *Fid) (*Dir, error) {
