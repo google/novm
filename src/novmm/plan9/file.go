@@ -187,7 +187,7 @@ func (file *File) findPaths(fs *Fs, filepath string) {
 func (fs *Fs) lookup(path string) (*File, error) {
 
     // Normalize path.
-    if len(path) > 0 && path[len(path)-1] == "/"[0] {
+    if len(path) > 0 && path[len(path)-1] == '/' {
         path = path[:len(path)-1]
     }
 

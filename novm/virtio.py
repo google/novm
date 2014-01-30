@@ -46,7 +46,7 @@ class Device(device.Device):
 
     def data(self):
         if self._pci:
-            return None
+            return {}
         else:
             return {
                 "address": self._address,

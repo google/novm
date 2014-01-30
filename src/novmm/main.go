@@ -8,6 +8,9 @@ import (
     "novmm/platform"
 )
 
+// Our control server.
+var control_fd = flag.Int("controlfd", -1, "bound control socket")
+
 // Machine specifications.
 var vcpu_data = flag.String("vcpus", "[]", "list of vcpu states")
 var device_data = flag.String("devices", "[]", "list of device states")
@@ -50,7 +53,7 @@ func main() {
     }
 
     // Load all devices.
-    err = model.LoadDevices(vm, []byte(*device_data))
+    proxy, err := model.LoadDevices(vm, []byte(*device_data))
     if err != nil {
         log.Fatal(err)
     }
@@ -94,6 +97,12 @@ func main() {
             vcpu_err <- err
         }(vcpu)
     }
+
+    // Create our RPC server.
+    if *control_fd == -1 {
+        log.Fatal(InvalidControlSocket)
+    }
+    go serveControl(*control_fd, vm, proxy)
 
     // Wait until we get a signal,
     // or all the VCPUs are dead.

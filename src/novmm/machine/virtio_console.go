@@ -2,7 +2,7 @@ package machine
 
 import (
     "novmm/platform"
-    "syscall"
+    "sync"
 )
 
 const (
@@ -24,58 +24,11 @@ const (
 type VirtioConsoleDevice struct {
     *VirtioDevice
 
-    // The backing server fd.
-    Fd  int `json:"fd"`
-}
+    read_buf    *VirtioBuffer
+    read_offset int
+    read_lock   sync.Mutex
 
-func (device *VirtioConsoleDevice) dumpConsole(
-    vchannel *VirtioChannel,
-    fd int,
-    read bool) error {
-
-    // Make sure this fd is not blocking.
-    syscall.SetNonblock(fd, false)
-
-    // NOTE: This is just an example of how to
-    // use a virtio device for the moment. This
-    // will be done more rigorously shortly.
-    for buf := range vchannel.incoming {
-        if read {
-            length, err := buf.Read(fd, 0, buf.Length())
-            if err != nil {
-                return err
-            }
-            if length == 0 {
-                // Looks like the FD has been closed.
-                // No problem, I suppose our job is done.
-                // No more blocks will be read from this
-                // channel.
-                device.Debug("read done?")
-                buf.length = 0
-                vchannel.outgoing <- buf
-                return nil
-
-            } else {
-                buf.length = length
-            }
-
-        } else {
-            length, err := buf.Write(fd, 0, buf.Length())
-            if err != nil {
-                return err
-            }
-            if length == 0 {
-                // Looks like the FD has been closed.
-                // Okay, we'll just simulate it.
-            } else {
-                buf.length = length
-            }
-        }
-
-        vchannel.outgoing <- buf
-    }
-
-    return nil
+    write_lock sync.Mutex
 }
 
 func (device *VirtioConsoleDevice) sendCtrl(
@@ -141,8 +94,9 @@ func (device *VirtioConsoleDevice) ctrlConsole(
             vchannel.Debug("port-ready")
 
             if id == 0 && value == 1 {
-                // Yes, this is a console.
-                device.sendCtrl(0, VirtioConsolePortConsole, 1)
+                // No, this is not a console.
+                device.sendCtrl(0, VirtioConsolePortConsole, 0)
+                device.sendCtrl(0, VirtioConsolePortOpen, 1)
             }
             break
 
@@ -176,6 +130,8 @@ func setupConsole(device *VirtioDevice) (Device, error) {
     // Set our features.
     device.SetFeatures(VirtioConsoleFMultiPort)
 
+    // We only support a single port.
+    // (The worst multi-port device in history).
     device.Config.GrowTo(8)
     device.Config.Set32(4, 1)
 
@@ -213,9 +169,62 @@ func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error 
     }
 
     // Start our console process.
-    go console.dumpConsole(console.Channels[0], 0, true)
-    go console.dumpConsole(console.Channels[1], 1, false)
     go console.ctrlConsole(console.Channels[3])
 
+    return nil
+}
+
+func (console *VirtioConsoleDevice) Read(p []byte) (int, error) {
+
+    console.read_lock.Lock()
+    defer console.read_lock.Unlock()
+
+    // Need a new buffer?
+    if console.read_buf == nil {
+        console.read_buf = <-console.Channels[1].incoming
+    }
+
+    // Copy out as much as possible.
+    n := console.read_buf.CopyOut(console.read_offset, p)
+    console.read_offset += n
+    if console.read_offset == console.read_buf.Length() {
+        // Done with this buffer.
+        console.Channels[1].outgoing <- console.read_buf
+        console.read_buf = nil
+        console.read_offset = 0
+    }
+
+    return n, nil
+}
+
+func (console *VirtioConsoleDevice) Write(p []byte) (int, error) {
+
+    console.write_lock.Lock()
+    defer console.write_lock.Unlock()
+
+    // Always grab a new buffer.
+    buf := <-console.Channels[0].incoming
+
+    // Map as much as possible.
+    var n int
+    data := buf.Map(0, len(p))
+    if len(data) < len(p) {
+        n = len(data)
+        copy(data, p[:len(data)])
+    } else {
+        n = len(p)
+        copy(data, p)
+    }
+    buf.length = n
+
+    // Put the buffer back.
+    console.Channels[0].outgoing <- buf
+
+    // We're done.
+    return n, nil
+}
+
+func (console *VirtioConsoleDevice) Close() error {
+    // Ignore.
     return nil
 }

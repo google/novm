@@ -210,3 +210,31 @@ func (buf *VirtioBuffer) Map(
     // give back nothing to indicate.
     return nil
 }
+
+func (buf *VirtioBuffer) CopyOut(
+    offset int,
+    output []byte) int {
+
+    copied := 0
+
+    for _, data := range buf.data {
+        if offset >= len(data) {
+            offset -= len(data)
+            continue
+        } else if offset > 0 {
+            data = data[offset:]
+        }
+
+        if len(data) > len(output) {
+            copy(output, data[:len(output)])
+            copied += len(output)
+            break
+        } else {
+            copy(output, data)
+            copied += len(data)
+            output = output[len(data):]
+        }
+    }
+
+    return copied
+}

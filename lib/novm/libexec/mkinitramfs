@@ -36,7 +36,7 @@ mknod -m 664 $WDIR/dev/null    c 1 3
 install -m0755 $(dirname $0)/init $WDIR/init
 
 # Copy our files.
-binfiles="cat strace md5sum hexdump ls sh sleep mount umount mkdir ln"
+binfiles="cat chmod cp rm ls sh sleep mount umount mkdir rmdir ln"
 sbinfiles="modprobe switch_root"
 
 if [ -x /bin/kmod ] ; then

@@ -21,6 +21,7 @@ from . import fs
 from . import clock
 from . import pci
 from . import cpu
+from . import control
 
 class NovmManager(object):
 
@@ -125,6 +126,10 @@ class NovmManager(object):
         # Is our kernel valid?
         if kernel not in self._kernels.list():
             raise Exception("Kernel not found!")
+
+        # Always add control sockets.
+        ctrl = control.Control(os.getpid(), bind=True)
+        args.extend(["-controlfd=%d" % ctrl.fd()])
 
         # Always add basic devices.
         devices.append(basic.Bios())
@@ -242,6 +247,25 @@ class NovmManager(object):
 
         sys.stderr.write("exec: %s\n" % " ".join(args))
         os.execv(utils.libexec("novmm"), args)
+
+    def execute(self,
+            id=cli.StrOpt("The instance id."),
+            name=cli.StrOpt("The instance name."),
+            *command):
+
+        """ Execute a command inside a novm. """
+
+        if id is not None:
+            if name is not None:
+                raise Exception("Id must be specified alone.")
+            obj_id = id
+        else:
+            obj_id = self._instances.find(name=name)
+        if obj_id is None or not obj_id in self._instances.list():
+            raise Exception("Instance not found.")
+
+        ctrl = control.Control(obj_id, bind=False)
+        ctrl.execute(command)
 
     def list(self,
             devices=cli.BoolOpt("Include device info?")):
@@ -371,7 +395,7 @@ class NovmManager(object):
             shutil.copy(vmlinux, os.path.join(temp_dir, "vmlinux"))
             shutil.copy(sysmap, os.path.join(temp_dir, "sysmap"))
             shutil.copy(setup, os.path.join(temp_dir, "setup"))
-            #shutil.copytree(modules, os.path.join(temp_dir, "modules"))
+            shutil.copytree(modules, os.path.join(temp_dir, "modules"))
             os.makedirs(os.path.join(temp_dir, "modules"))
             open(os.path.join(temp_dir, "release"), "w").write(release)
             utils.packdir(temp_dir, output)

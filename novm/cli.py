@@ -155,7 +155,6 @@ def main(args):
 
     (fn, args, varargs, parser) = commands[top_args.command[0]]
     command_args = parser.parse_args(top_args.command[1:])
-
     try:
         # Run our command.
         if varargs is not None:
