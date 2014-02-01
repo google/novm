@@ -77,11 +77,17 @@ class Control(object):
                     obj = json.loads(fobj.readline())
 
                     if "stderr" in obj:
-                        data = binascii.a2b_base64(obj["data"])
-                        if obj.get("stderr"):
-                            sys.stderr.write(data)
+                        if obj["data"] is None:
+                            if obj.get("stderr"):
+                                sys.stderr.close()
+                            else:
+                                sys.stdout.close()
                         else:
-                            sys.stdout.write(data)
+                            data = binascii.a2b_base64(obj["data"])
+                            if obj.get("stderr"):
+                                sys.stderr.write(data)
+                            else:
+                                sys.stdout.write(data)
 
                     elif "exitcode" in obj:
                         sys.exit(obj["exitcode"])
