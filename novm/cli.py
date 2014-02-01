@@ -113,7 +113,11 @@ def main(args):
         # Save the command and parser.
         for arg in real_args:
             parser.add_argument(arg)
-        commands[attr] = (fn, parser)
+        if argspec.varargs is not None:
+            parser.add_argument(
+                argspec.varargs,
+                nargs='+')
+        commands[attr] = (fn, argspec.args[1:], argspec.varargs, parser)
 
     # Build our top-level parser.
     command_text = [
@@ -149,12 +153,19 @@ def main(args):
         top_parser.print_help()
         sys.exit(1)
 
-    (fn, parser) = commands[top_args.command[0]]
+    (fn, args, varargs, parser) = commands[top_args.command[0]]
     command_args = parser.parse_args(top_args.command[1:])
 
     try:
         # Run our command.
-        result = fn(**vars(command_args))
+        if varargs is not None:
+            extra_args = getattr(command_args, varargs)
+            delattr(command_args, varargs)
+            built_args = [getattr(command_args, x) for x in args]
+            built_args.extend(extra_args)
+            result = fn(*built_args)
+        else:
+            result = fn(**vars(command_args))
     except Exception, e:
         if top_args.debug:
             traceback.print_exc()
