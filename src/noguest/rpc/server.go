@@ -5,6 +5,7 @@ import (
     "net/rpc/jsonrpc"
     "os"
     "sync"
+    "syscall"
     "time"
 )
 
@@ -77,6 +78,9 @@ type Server struct {
     // Active processes.
     active map[int]*Process
 
+    // Is wait running?
+    waiting bool
+
     // Our lock protects
     // access to the above map.
     mutex sync.Mutex
@@ -107,6 +111,50 @@ func (server *Server) lookup(pid int) *Process {
     return server.active[pid]
 }
 
+func (server *Server) wait() {
+
+    server.mutex.Lock()
+    if server.waiting {
+        server.mutex.Unlock()
+        return
+    }
+    server.waiting = true
+    server.mutex.Unlock()
+
+    var wstatus syscall.WaitStatus
+    var rusage syscall.Rusage
+    var last_run bool
+    for {
+        pid, err := syscall.Wait4(-1, &wstatus, 0, &rusage)
+        if err != nil {
+            if err == syscall.ECHILD {
+                // Run once more to catch any races.
+                server.mutex.Lock()
+                if server.waiting {
+                    server.waiting = false
+                    server.mutex.Unlock()
+                    last_run = true
+                    continue
+                } else {
+                    server.mutex.Unlock()
+                    return
+                }
+            } else {
+                continue
+            }
+        }
+        if wstatus.Exited() {
+            process := server.lookup(pid)
+            if process != nil {
+                process.setExitcode(wstatus.ExitStatus())
+            }
+        }
+        if last_run {
+            break
+        }
+    }
+}
+
 func Run(file *os.File) {
 
     // Create our server.
@@ -120,6 +168,9 @@ func Run(file *os.File) {
     codec := jsonrpc.NewServerCodec(file)
     rpcserver := rpc.NewServer()
     rpcserver.Register(server)
+
+    // Listen for children.
+    go server.wait()
 
     // Service requests.
     rpcserver.ServeCodec(codec)

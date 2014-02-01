@@ -91,24 +91,6 @@ func (server *Server) Start(
         old_process.close()
     }
 
-    // Wait for death.
-    go func(process *Process) {
-        for {
-            state, err := proc.Wait()
-            if err != nil {
-                // Something bad.
-                process.close()
-            }
-            if state.Exited() {
-                if state.Success() {
-                    process.setExitcode(0)
-                } else {
-                    process.setExitcode(1)
-                }
-                break
-            }
-        }
-    }(process)
-
+    go server.wait()
     return nil
 }
