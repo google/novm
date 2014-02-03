@@ -63,8 +63,8 @@ func (net *VirtioNetDevice) Attach(vm *platform.Vm, model *Model) error {
     }
 
     // Start our network process.
-    go net.processPackets(net.Channels[0], false)
-    go net.processPackets(net.Channels[1], true)
+    go net.processPackets(net.Channels[0], true)
+    go net.processPackets(net.Channels[1], false)
 
     return nil
 }
