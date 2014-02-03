@@ -29,6 +29,8 @@ type VirtioConsoleDevice struct {
     read_lock   sync.Mutex
 
     write_lock sync.Mutex
+
+    Opened bool `json:"opened"`
 }
 
 func (device *VirtioConsoleDevice) sendCtrl(
@@ -97,6 +99,11 @@ func (device *VirtioConsoleDevice) ctrlConsole(
                 // No, this is not a console.
                 device.sendCtrl(0, VirtioConsolePortConsole, 0)
                 device.sendCtrl(0, VirtioConsolePortOpen, 1)
+                if !device.Opened {
+                    device.Opened = true
+                    device.read_lock.Unlock()
+                    device.write_lock.Unlock()
+                }
             }
             break
 
@@ -167,6 +174,10 @@ func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error 
     if err != nil {
         return err
     }
+
+    // Ensure no reads/writes go through.
+    console.read_lock.Lock()
+    console.write_lock.Lock()
 
     // Start our console process.
     go console.ctrlConsole(console.Channels[3])
