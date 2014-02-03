@@ -10,6 +10,11 @@ import sys
 if os.path.exists(os.path.join("novm", "__init__.py")):
     sys.path.insert(0, ".")
 
+lib_path = os.path.join(
+    os.path.abspath(os.path.dirname(__file__)),
+    "..", "lib", "novm", "python")
+sys.path.append(lib_path)
+
 import novm.cli
 
 if __name__ == "__main__":

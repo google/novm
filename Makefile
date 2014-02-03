@@ -68,10 +68,9 @@ dist:
 	@rm -rf dist/lib && cp -ar lib/ dist/usr/lib
 	@install -m 0755 bin/* dist/usr/lib/novm/libexec
 	@# Install our python code.
-	@rm -rf dist/usr/share/pyshared
-	@mkdir -p dist/usr/share/pyshared/novm
-	@rsync -ru --delete --exclude=*.pyc novm/ \
-	    dist/usr/share/pyshared/novm
+	@mkdir -p dist/usr/lib/novm/python
+	@rsync -ru --delete --exclude=*.pyc novm \
+	    dist/usr/lib/novm/python/
 
 .PHONY: dist
 
