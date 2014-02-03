@@ -58,12 +58,12 @@ class NovmManager(object):
             pack=cli.ListOpt("Use a given read pack."),
             read=cli.ListOpt("Define a backing filesystem read tree."),
             write=cli.ListOpt("Define a backing filesystem write tree."),
-            console=cli.BoolOpt("Enable virtual console?"),
             nopci=cli.BoolOpt("Disable PCI devices?"),
             com1=cli.BoolOpt("Enable COM1 UART?"),
             com2=cli.BoolOpt("Enable COM2 UART?"),
             cmdline=cli.StrOpt("Extra command line options?"),
-            vmmopt=cli.ListOpt("Options to pass to novmm.")):
+            vmmopt=cli.ListOpt("Options to pass to novmm."),
+            nofork=cli.BoolOpt("Don't fork into the background.")):
 
         """ 
         Run a new instance.
@@ -104,8 +104,6 @@ class NovmManager(object):
             which is a temporary directory for the instance.
 
                 /=>temp_dir
-
-        The console flag is a simple boolean.
         """
         if vcpus is None:
             vcpus = 1
