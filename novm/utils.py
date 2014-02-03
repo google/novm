@@ -8,6 +8,9 @@ import signal
 import thread
 import zipfile
 
+def raise_exception(signo, frame):
+    thread.exit()
+
 def cleanup(fcn=None, *args, **kwargs):
     # We setup a safe procedure here to ensure that the
     # child will receive a SIGTERM when the parent exits.
@@ -34,7 +37,7 @@ def cleanup(fcn=None, *args, **kwargs):
         # We don't have multiple threads here, so we're
         # guaranteed that this will be handled in this frame.
         if fcn is not None:
-            signal.signal(signal.SIGTERM, lambda signo, frame: thread.exit)
+            signal.signal(signal.SIGTERM, raise_exception)
 
         # Set P_SETSIGDEATH to SIGTERM.
         libc.prctl(1, signal.SIGTERM)
@@ -51,13 +54,21 @@ def cleanup(fcn=None, *args, **kwargs):
             if fcn is None:
                 return
 
+            # Close descriptors.
+            for fd in range(3, os.sysconf("SC_OPEN_MAX")):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
             # Let's close off the terminal.
             null = open("/dev/null", "w+")
             os.dup2(null.fileno(), 0)
             os.dup2(null.fileno(), 1)
+            os.dup2(null.fileno(), 2)
 
             # Wait for the exit.
-            while True:
+            while os.getppid() == parent_pid:
                 signal.pause()
 
         except (SystemExit, KeyboardInterrupt):

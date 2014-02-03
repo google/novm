@@ -1,5 +1,5 @@
 """
-Console functions.
+Timers, etc.
 """
 from . import device
 

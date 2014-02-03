@@ -32,8 +32,8 @@ class Nodb(object):
             if not os.path.isdir(self._root):
                 raise
 
-    def file(self, name, *args):
-        return os.path.join(self._root, name, *args)
+    def file(self, obj_id, *args):
+        return os.path.join(self._root, obj_id, *args)
 
     def list(self):
         # We store all data in the given directory.
@@ -42,26 +42,52 @@ class Nodb(object):
         return [x[0] for x in entries if x[1] == '.json']
 
     def show(self):
-        return dict([(x, self.get(x)) for x in self.list()])
+        keys = self.list()
+        result = {}
+        for key in keys:
+            try:
+                result[key] = self.get(obj_id=key)
+            except KeyError:
+                # Race condition, deleted.
+                # Ignore and continue.
+                continue
+        return result
 
-    def add(self, name, obj):
+    def add(self, obj_id, obj):
         obj["timestamp"] = time.time()
-        with open(self.file("%s.json" % name), 'w') as outf:
-            json.dump(
-                obj, outf,
-                check_circular=True,
-                indent=True)
+        try:
+            with open(self.file("%s.json" % obj_id), 'w') as outf:
+                json.dump(
+                    obj, outf,
+                    check_circular=True,
+                    indent=True)
+        except (IOError, OSError):
+            # Already exists.
+            return KeyError(obj_id)
 
-    def get(self, name):
-        with open(self.file("%s.json" % name), 'r') as inf:
-            return json.load(inf)
+    def get(self, obj_id=None, **kwargs):
+        try:
+            obj_id = self.find(obj_id=obj_id, **kwargs)
+            with open(self.file("%s.json" % obj_id), 'r') as inf:
+                return json.load(inf)
+        except (IOError, OSError):
+            # Does not exist.
+            return KeyError(obj_id)
 
-    def remove(self, name):
-        os.remove(self.file("%s.json" % name))
-        if os.path.exists(self.file(name)):
-            shutil.rmtree(self.file(name))
+    def remove(self, obj_id=None, **kwargs):
+        try:
+            obj_id = self.find(obj_id=obj_id, **kwargs)
+            os.remove(self.file("%s.json" % obj_id))
+            if os.path.exists(self.file(obj_id)):
+                shutil.rmtree(self.file(obj_id))
+        except OSError:
+            # Does not exist.
+            return KeyError(obj_id)
 
-    def find(self, **kwargs):
+    def find(self, obj_id=None, **kwargs):
+        if obj_id is not None:
+            return obj_id
+
         found = None
         timestamp = 0
         for obj_id in self.list():
@@ -74,7 +100,11 @@ class Nodb(object):
                 obj_data.get("timestamp") > timestamp):
                 found = obj_id
                 timestamp = obj_data.get("timestamp")
-        return found
+
+        if found:
+            return found
+        else:
+            return KeyError(str(kwargs))
 
     def fetch(self, url, **kwargs):
         obj = {"url": url}

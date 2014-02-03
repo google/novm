@@ -1,6 +1,7 @@
 """
 Filesystem device functions.
 """
+import os
 import uuid
 import tempfile
 import shutil
@@ -14,12 +15,14 @@ class FS(virtio.Device):
 
     def __init__(
             self,
+            index=None,
             tag=None,
+            tempdir=None,
             read=None,
             write=None,
             **kwargs):
 
-        super(FS, self).__init__(**kwargs)
+        super(FS, self).__init__(index=index, **kwargs)
 
         if tag is None:
             tag = str(uuid.uuid4())
@@ -27,6 +30,11 @@ class FS(virtio.Device):
             read = []
         if write is None:
             write = []
+        if tempdir is None:
+            tempdir = tempfile.mkdtemp()
+            utils.cleanup(shutil.rmtree, tempdir)
+        if not os.path.exists(tempdir):
+            os.makedirs(tempdir)
 
         # Save our tag.
         self._tag = tag
@@ -43,8 +51,6 @@ class FS(virtio.Device):
                 self._read[spec[0]].append(spec[1])
 
         # Append our write mapping.
-        tempdir = tempfile.mkdtemp()
-        utils.cleanup(shutil.rmtree, tempdir)
         self._write = {'/': tempdir}
 
         for path in write:
@@ -52,7 +58,7 @@ class FS(virtio.Device):
             if len(spec) == 1:
                 self._write['/'] = path
             else:
-                self._write[spec[1]] = spec[0]
+                self._write[spec[0]] = spec[1]
 
     def data(self):
         return {

@@ -8,6 +8,7 @@ import json
 import platform
 import tempfile
 import shutil
+import fcntl
 
 from . import utils
 from . import db
@@ -48,7 +49,7 @@ class NovmManager(object):
                 "NOVM_KERNELS",
                 os.path.join(root, "kernels")))
 
-    def run(self,
+    def create(self,
             name=cli.StrOpt("The instance name."),
             vcpus=cli.IntOpt("The number of vcpus."),
             memsize=cli.IntOpt("The member size (in mb)."),
@@ -76,34 +77,34 @@ class NovmManager(object):
             Available options are:
 
             name=name             Set the device name.
-            debug=true            Enable debugging.
             mac=00:11:22:33:44:55 Set the MAC address.
             tap=tap1              Set the tap name.
             bridge=br0            Enslave to a bridge.
             ip=192.168.1.2/24     Set the IP address.
             gateway=192.168.1.1   Set the gateway IP.
+            debug=true            Enable debugging.
 
         Disk definitions are provided as --disk [opt=val],...
 
             Available options are:
 
             name=name             Set the device name.
-            debug=true            Enable debugging.
             file=filename         Set the backing file (raw).
             dev=vda               Set the device name.
+            debug=true            Enable debugging.
 
         Read definitions are provided as a mapping.
 
-            path=>vm_path         Map the given path for reads.
+            vm_path=>path         Map the given path for reads.
 
         Write definitions are also provided as a mapping.
 
-            path=>vm_path         Map the given path for writes.
+            vm_path=>         Map the given path for writes.
 
             Note that these is always an implicit write path,
             which is a temporary directory for the instance.
 
-                /=>temp_dir
+                temp_dir=>/
         """
         if vcpus is None:
             vcpus = 1
@@ -115,169 +116,204 @@ class NovmManager(object):
         args = ["novmm"]
         devices = []
 
-        # Choose the latest kernel by default.
-        if kernel is None:
-            available_kernels = self._kernels.list()
-            if len(available_kernels) > 0:
-                kernel = available_kernels[0]
+        if not nofork:
+            r, w = os.pipe()
+            child = os.fork()
+            if child != 0:
+                # Wait for the result,
+                # Return the new instance_id.
+                os.close(w)
+                data = os.read(r, 4096)
+                if not data:
+                    return child
+                else:
+                    raise Exception(data)
+            else:
+                # Continue to create the VM.
+                # The read pipe will be closed automatically
+                # only when the new VM is actually running.
+                os.close(r)
+                fcntl.fcntl(w, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
 
-        # Is our kernel valid?
-        if kernel not in self._kernels.list():
-            raise Exception("Kernel not found!")
+        try:
+            # Choose the latest kernel by default.
+            if kernel is None:
+                available_kernels = self._kernels.list()
+                if len(available_kernels) > 0:
+                    kernel = available_kernels[0]
 
-        # Always add control sockets.
-        ctrl = control.Control(os.getpid(), bind=True)
-        args.extend(["-controlfd=%d" % ctrl.fd()])
+            # Is our kernel valid?
+            if kernel not in self._kernels.list():
+                raise Exception("Kernel not found!")
 
-        # Always add basic devices.
-        devices.append(basic.Bios())
-        devices.append(basic.Acpi())
+            # Always add basic devices.
+            devices.append(basic.Bios())
+            devices.append(basic.Acpi())
 
-        # Add the kernel arguments.
-        # (Including the packed modules).
-        args.extend(["-vmlinux", self._kernels.file(kernel, "vmlinux")])
-        args.extend(["-sysmap", self._kernels.file(kernel, "sysmap")])
-        args.extend(["-initrd", self._kernels.file(kernel, "initrd")])
-        args.extend(["-setup", self._kernels.file(kernel, "setup")])
-        release = open(self._kernels.file(kernel, "release")).read().strip()
+            # Add the kernel arguments.
+            # (Including the packed modules).
+            args.extend(["-vmlinux", self._kernels.file(kernel, "vmlinux")])
+            args.extend(["-sysmap", self._kernels.file(kernel, "sysmap")])
+            args.extend(["-initrd", self._kernels.file(kernel, "initrd")])
+            args.extend(["-setup", self._kernels.file(kernel, "setup")])
+            release = open(self._kernels.file(kernel, "release")).read().strip()
 
-        # Use uart devices?
-        if com1:
-            devices.append(serial.Com1())
-        if com2:
-            devices.append(serial.Com2())
+            # Use uart devices?
+            if com1:
+                devices.append(serial.Com1())
+            if com2:
+                devices.append(serial.Com2())
 
-        # ALways enable an RTC.
-        devices.append(clock.Rtc())
+            # Always enable an RTC.
+            devices.append(clock.Rtc())
 
-        # Use a PCI bus?
-        if not(nopci):
-            devices.append(pci.PciBus())
-            devices.append(pci.PciHostBridge())
+            # Use a PCI bus?
+            if not(nopci):
+                devices.append(pci.PciBus())
+                devices.append(pci.PciHostBridge())
 
-        # Always enable the console.
-        # The noguest binary that executes inside
-        # the guest will use this as an RPC mechanism.
-        devices.append(serial.Console(index=0, pci=not(nopci)))
+            # Always enable the console.
+            # The noguest binary that executes inside
+            # the guest will use this as an RPC mechanism.
+            devices.append(serial.Console(index=0, pci=not(nopci)))
 
-        # Build our NICs.
-        devices.extend([
-            net.Nic(index=1+index, pci=not(nopci),
-                **dict([
-                opt.split("=", 1)
-                for opt in nic.split(",")
-            ]))
-            for (index, nic) in zip(range(len(nic)), nic)
-        ])
+            # Build our NICs.
+            devices.extend([
+                net.Nic(index=1+index, pci=not(nopci),
+                    **dict([
+                    opt.split("=", 1)
+                    for opt in nic.split(",")
+                ]))
+                for (index, nic) in zip(range(len(nic)), nic)
+            ])
 
-        # Build our disks.
-        devices.extend([
-            block.Disk(index=1+len(nic)+index, pci=not(nopci),
-                **dict([
-                opt.split("=", 1)
-                for opt in disk.split(",")
-            ]))
-            for (index, disk) in zip(range(len(disk)), disk)
-        ])
+            # Build our disks.
+            devices.extend([
+                block.Disk(index=1+len(nic)+index, pci=not(nopci),
+                    **dict([
+                    opt.split("=", 1)
+                    for opt in disk.split(",")
+                ]))
+                for (index, disk) in zip(range(len(disk)), disk)
+            ])
 
-        # Add modules.
-        if os.path.exists(self._kernels.file(kernel, "modules")):
-            read.append(
-                "/lib/modules/%s=>%s" % (
-                    release,
-                    self._kernels.file(kernel, "modules")
+            # Add modules.
+            if os.path.exists(self._kernels.file(kernel, "modules")):
+                read.append(
+                    "/lib/modules/%s=>%s" % (
+                        release,
+                        self._kernels.file(kernel, "modules")
+                    )
                 )
-            )
 
-        # Add our packs.
-        # NOTE: All packs are given relative to root.
-        for p in pack:
-            read.append(self._packs.file(p))
+            # Add our packs.
+            # NOTE: All packs are given relative to root.
+            for p in pack:
+                read.append(self._packs.file(p))
 
-        # The root filesystem.
-        devices.append(fs.FS(
-            pci=not(nopci),
-            tag="root",
-            read=read,
-            write=write))
+            # The root filesystem.
+            devices.append(fs.FS(
+                index=1+len(nic)+len(disk),
+                pci=not(nopci),
+                tag="root",
+                tempdir=self._instances.file(str(os.getpid())),
+                read=read,
+                write=write))
 
-        # Our init.
-        devices.append(fs.FS(
-            pci=not(nopci),
-            tag="init",
-            read=["/init=>%s" % utils.libexec("noguest")]
-        ))
+            # Add noguest as our init.
+            devices.append(fs.FS(
+                index=1+len(nic)+len(disk)+1,
+                pci=not(nopci),
+                tag="init",
+                read=["/init=>%s" % utils.libexec("noguest")]
+            ))
 
-        # Enable user-memory.
-        devices.append(memory.UserMemory(
-            size=1024*1024*(memsize or 1024)))
+            # Enable user-memory.
+            devices.append(memory.UserMemory(
+                size=1024*1024*(memsize or 1024)))
 
-        # Save metadata.
-        info = {
-            "name": name,
-            "vcpus": vcpus,
-            "kernel": kernel,
-            "devices": [
-                (dev.__class__.__name__, dev.info())
-                for dev in devices if dev
-            ],
-        }
-        self._instances.add(str(os.getpid()), info)
+            # Provide our CPU data.
+            args.append("-vcpus=%s" %
+                json.dumps([
+                    cpu.Cpu().arg() for _ in range(vcpus)
+            ]))
 
-        # Provide our CPU data.
-        args.append("-vcpus=%s" %
-            json.dumps([
-                cpu.Cpu().arg() for _ in range(vcpus)
-        ]))
+            # Add our control socket.
+            ctrl = control.Control(os.getpid(), bind=True)
+            args.extend(["-controlfd=%d" % ctrl.fd()])
 
-        # Construct our cmdline.
-        args.append("-cmdline=%s %s" % (" ".join([
-            dev.cmdline()
-            for dev in devices
-            if dev.cmdline() is not None
-        ]), cmdline))
+            # Construct our cmdline.
+            args.append("-cmdline=%s %s" % (" ".join([
+                dev.cmdline()
+                for dev in devices
+                if dev.cmdline() is not None
+            ]), cmdline))
+            args.append("-devices=%s" % json.dumps([
+                dev.arg() for dev in devices
+            ]))
+            args.extend(["-%s" % x for x in vmmopt])
 
-        # Execute the instance.
-        args.append("-devices=%s" % json.dumps([
-            dev.arg() for dev in devices
-        ]))
-        args.extend(["-%s" % x for x in vmmopt])
+            # Save metadata.
+            info = {
+                "name": name,
+                "vcpus": vcpus,
+                "kernel": kernel,
+                "devices": [
+                    (dev.__class__.__name__, dev.info())
+                    for dev in devices if dev
+                ],
+            }
+            self._instances.add(str(os.getpid()), info)
+            utils.cleanup(self._instances.remove, str(os.getpid()))
 
-        sys.stderr.write("exec: %s\n" % " ".join(args))
-        os.execv(utils.libexec("novmm"), args)
+            # Show our final command.
+            sys.stderr.write("exec: %s\n" % " ".join(args))
 
-    def execute(self,
-            id=cli.StrOpt("The instance id."),
+            # Close off final descriptors.
+            if not nofork:
+                null_w = open("/dev/null", "w")
+                null_r = open("/dev/null", "r")
+                os.dup2(null_r.fileno(), 0)
+                os.dup2(null_w.fileno(), 1)
+                os.dup2(null_w.fileno(), 2)
+
+            # Run our command.
+            os.execv(utils.libexec("novmm"), args)
+
+        except Exception, e: 
+            if not nofork:
+                # Write our exception.
+                os.write(w, str(e))
+                os.close(w)
+            # Raise in the main thread.
+            raise
+
+    def run(self,
+            instance_id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name."),
             *command):
 
         """ Execute a command inside a novm. """
-
-        if id is not None:
-            if name is not None:
-                raise Exception("Id must be specified alone.")
-            obj_id = id
-        else:
-            obj_id = self._instances.find(name=name)
-        if obj_id is None or not obj_id in self._instances.list():
-            raise Exception("Instance not found.")
-
-        ctrl = control.Control(obj_id, bind=False)
-        ctrl.execute(command)
+        ctrl = control.Control(
+                self._instances.find(obj_id=instance_id, name=name),
+                bind=False)
+        return ctrl.run(command)
 
     def list(self,
             devices=cli.BoolOpt("Include device info?")):
+
         """ List running instances. """
-        legit_instances = []
         for instance in self._instances.list():
             try:
+                # Is this process still around?
                 os.kill(int(instance), 0)
             except OSError:
-                self._instances.remove(instance)
+                self._instances.remove(obj_id=instance)
                 continue
-            legit_instances.append(instance)
+
         rval = self._instances.show()
         if not devices:
+            # Prune devices, unless requested.
             for value in rval.values():
                 if "devices" in value:
                     del value["devices"]
@@ -293,11 +329,11 @@ class NovmManager(object):
             name=cli.StrOpt("A user-provided name.")):
         """ Fetch a new pack. """
         if not nocache:
-            obj_id = self._packs.find(url=url, name=name)
-            if obj_id is not None:
-                return obj_id
-        if url is None:
-            raise Exception("Need URL.")
+            try:
+                # Try to find an existing pack.
+                return self._packs.find(url=url, name=name)
+            except KeyError:
+                pass
         return self._packs.fetch(url, name=name)
 
     def mkpack(self,
@@ -314,21 +350,12 @@ class NovmManager(object):
         return "file://%s" % os.path.abspath(output)
 
     def rmpack(self,
-            id=cli.StrOpt("The pack id."),
+            pack_id=cli.StrOpt("The pack id."),
             name=cli.StrOpt("The pack name."),
             url=cli.StrOpt("The pack URL")):
 
         """ Remove an existing pack. """
-
-        if id is not None:
-            if name is not None or url is not None:
-                raise Exception("Id must be specified alone.")
-            obj_id = id
-        else:
-            obj_id = self._packs.find(name=name, url=url)
-        if obj_id is None or not obj_id in self._packs.list():
-            raise Exception("Pack not found.")
-        self._packs.remove(obj_id)
+        self._packs.remove(obj_id=pack_id, name=name, url=url)
 
     def kernels(self):
         """ List available kernels. """
@@ -340,11 +367,11 @@ class NovmManager(object):
             name=cli.StrOpt("A user-provided name.")):
         """ Fetch a new kernel. """
         if not nocache:
-            obj_id = self._kernels.find(url=url, name=name)
-            if obj_id is not None:
-                return obj_id
-        if url is None:
-            raise Exception("Need URL.")
+            try:
+                # Try to find an existing kernel.
+                return self._kernels.find(url=url, name=name)
+            except KeyError:
+                pass
         return self._kernels.fetch(url, name=name)
 
     def mkkernel(self,
@@ -402,18 +429,9 @@ class NovmManager(object):
             shutil.rmtree(temp_dir)
 
     def rmkernel(self,
-            id=cli.StrOpt("The kernel id."),
+            kernel_id=cli.StrOpt("The kernel id."),
             name=cli.StrOpt("The kernel name."),
             url=cli.StrOpt("The kernel URL")):
 
         """ Remove an existing kernel. """
-
-        if id is not None:
-            if name is not None or url is not None:
-                raise Exception("Id must be specified alone.")
-            obj_id = id
-        else:
-            obj_id = self._kernels.find(name=name, url=url)
-        if obj_id is None or not obj_id in self._kernels.list():
-            raise Exception("Kernel not found.")
-        self._kernels.remove(obj_id)
+        self._kernels.remove(obj_id=kernel_id, name=name, url=url)

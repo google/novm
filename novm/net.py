@@ -61,6 +61,7 @@ class Nic(virtio.Device):
 
     def __init__(
             self,
+            index=None,
             mac=None,
             tapname=None,
             bridge=None,
@@ -68,7 +69,7 @@ class Nic(virtio.Device):
             gateway=None,
             **kwargs):
 
-        super(Nic, self).__init__(**kwargs)
+        super(Nic, self).__init__(index=index, **kwargs)
 
         if mac is None:
             mac = random_mac()

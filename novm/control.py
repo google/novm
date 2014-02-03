@@ -44,7 +44,7 @@ class Control(object):
     def fd(self):
         return self._sock.fileno()
 
-    def execute(self, command, environment=None, cwd="/"):
+    def run(self, command, environment=None, cwd="/"):
         if environment is None:
             environment = os.environ
 
