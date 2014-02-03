@@ -34,20 +34,6 @@ mount -t 9p -o trans=virtio,version=9p2000.u,ro init /sysinit
 exec 3</sysinit/init
 umount -l /sysinit
 
-# Parse our command line arguments.
-# We push all possible actions (IP addrs, etc.)
-# to the RPC channel, but debugging it's useful
-# to be able to to fire up a shell from the init.
-shell=n
-for x in $(cat /proc/cmdline); do
-    case $x in
-    shell)
-        echo "Running interactive shell..." >/dev/kmsg
-        sh -i < /dev/hvc0 > /dev/hvc0
-        ;;
-    esac
-done
-
 # Execute our noinit process.
 #
 # The second thing it will do is open

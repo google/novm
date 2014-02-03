@@ -9,6 +9,7 @@ import platform
 import tempfile
 import shutil
 import fcntl
+import pickle
 
 from . import utils
 from . import db
@@ -110,30 +111,34 @@ class NovmManager(object):
             vcpus = 1
         if pack is None:
             pack = []
-        if read is None:
-            read = []
+        if not read:
+            read = ["/"]
 
         args = ["novmm"]
         devices = []
 
         if not nofork:
-            r, w = os.pipe()
+            r_pipe, w_pipe = os.pipe()
             child = os.fork()
             if child != 0:
                 # Wait for the result,
                 # Return the new instance_id.
-                os.close(w)
-                data = os.read(r, 4096)
+                os.close(w_pipe)
+                r = os.fdopen(r_pipe, 'r')
+                data = r.read()
                 if not data:
+                    # Closed by exec().
                     return child
                 else:
-                    raise Exception(data)
+                    # This is a pickle'd exception.
+                    (exc_type, exc_value) = pickle.loads(data)
+                    raise exc_value
             else:
                 # Continue to create the VM.
                 # The read pipe will be closed automatically
                 # only when the new VM is actually running.
-                os.close(r)
-                fcntl.fcntl(w, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
+                os.close(r_pipe)
+                fcntl.fcntl(w_pipe, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
 
         try:
             # Choose the latest kernel by default.
@@ -280,22 +285,27 @@ class NovmManager(object):
             # Run our command.
             os.execv(utils.libexec("novmm"), args)
 
-        except Exception, e: 
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except:
             if not nofork:
                 # Write our exception.
-                os.write(w, str(e))
-                os.close(w)
-            # Raise in the main thread.
-            raise
+                w = os.fdopen(w_pipe, 'w')
+                pickle.dump(sys.exc_info()[:2], w)
+                w.close()
+                sys.exit(1)
+            else:
+                # Raise in the main thread.
+                raise sys.exc_info()
 
     def run(self,
-            instance_id=cli.StrOpt("The instance id."),
+            id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name."),
             *command):
 
         """ Execute a command inside a novm. """
         ctrl = control.Control(
-                self._instances.find(obj_id=instance_id, name=name),
+                self._instances.find(obj_id=id, name=name),
                 bind=False)
         return ctrl.run(command)
 
@@ -350,12 +360,12 @@ class NovmManager(object):
         return "file://%s" % os.path.abspath(output)
 
     def rmpack(self,
-            pack_id=cli.StrOpt("The pack id."),
+            id=cli.StrOpt("The pack id."),
             name=cli.StrOpt("The pack name."),
             url=cli.StrOpt("The pack URL")):
 
         """ Remove an existing pack. """
-        self._packs.remove(obj_id=pack_id, name=name, url=url)
+        self._packs.remove(obj_id=id, name=name, url=url)
 
     def kernels(self):
         """ List available kernels. """
@@ -381,7 +391,8 @@ class NovmManager(object):
             vmlinux=cli.StrOpt("Path to the vmlinux file."),
             bzimage=cli.StrOpt("Path to the compressed image."),
             setup=cli.StrOpt("Path to the setup header."),
-            sysmap=cli.StrOpt("Path to the system map.")):
+            sysmap=cli.StrOpt("Path to the system map."),
+            nomodules=cli.BoolOpt("Don't include modules.")):
 
         """ Make a new kernel from an local kernel. """
 
@@ -420,8 +431,10 @@ class NovmManager(object):
             shutil.copy(vmlinux, os.path.join(temp_dir, "vmlinux"))
             shutil.copy(sysmap, os.path.join(temp_dir, "sysmap"))
             shutil.copy(setup, os.path.join(temp_dir, "setup"))
-            shutil.copytree(modules, os.path.join(temp_dir, "modules"))
-            os.makedirs(os.path.join(temp_dir, "modules"))
+            if nomodules:
+                os.makedirs(os.path.join(temp_dir, "modules"))
+            else:
+                shutil.copytree(modules, os.path.join(temp_dir, "modules"))
             open(os.path.join(temp_dir, "release"), "w").write(release)
             utils.packdir(temp_dir, output)
             return "file://%s" % os.path.abspath(output)
@@ -429,9 +442,9 @@ class NovmManager(object):
             shutil.rmtree(temp_dir)
 
     def rmkernel(self,
-            kernel_id=cli.StrOpt("The kernel id."),
+            id=cli.StrOpt("The kernel id."),
             name=cli.StrOpt("The kernel name."),
             url=cli.StrOpt("The kernel URL")):
 
         """ Remove an existing kernel. """
-        self._kernels.remove(obj_id=kernel_id, name=name, url=url)
+        self._kernels.remove(obj_id=id, name=name, url=url)

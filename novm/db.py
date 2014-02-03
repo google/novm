@@ -104,7 +104,7 @@ class Nodb(object):
         if found:
             return found
         else:
-            return KeyError(str(kwargs))
+            raise KeyError(str(kwargs))
 
     def fetch(self, url, **kwargs):
         obj = {"url": url}

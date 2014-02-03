@@ -7,6 +7,7 @@ import ctypes
 import signal
 import thread
 import zipfile
+import traceback
 
 def raise_exception(signo, frame):
     thread.exit()
@@ -50,7 +51,8 @@ def cleanup(fcn=None, *args, **kwargs):
 
             # Are we finished?
             # In the case of not having a function to
-            # execute, we simply return control.
+            # execute, we simply return control. This is
+            # a pre-exec hook for subprocess, for eaxample.
             if fcn is None:
                 return
 
@@ -61,19 +63,20 @@ def cleanup(fcn=None, *args, **kwargs):
                 except OSError:
                     pass
 
-            # Let's close off the terminal.
-            null = open("/dev/null", "w+")
-            os.dup2(null.fileno(), 0)
-            os.dup2(null.fileno(), 1)
-            os.dup2(null.fileno(), 2)
-
             # Wait for the exit.
             while os.getppid() == parent_pid:
                 signal.pause()
 
         except (SystemExit, KeyboardInterrupt):
             if fcn is not None:
-                fcn(*args, **kwargs)
+                try:
+                    fcn(*args, **kwargs)
+                except:
+                    # We eat all exceptions from the
+                    # cleanup function. If the user wants
+                    # to generate any output, they may --
+                    # however by default we silence it.
+                    pass
             os._exit(0)
 
 def packdir(path, output, include=None, exclude=None):
