@@ -64,15 +64,26 @@ class Control(object):
         if not "pid" in res:
             raise Exception(res)
 
+        # Our process exitcode.
+        exitcode = 0
+
         try:
             # Poll and transform the event stream.
             # This will basically turn this process
             # into a proxy for the remote process.
+            read_set = [fobj, sys.stdin]
             while True:
-                to_read, _, _ = select.select([fobj, sys.stdin], [], [])
+                to_read, _, _ = select.select(read_set, [], [])
 
                 if fobj in to_read:
-                    obj = json.loads(fobj.readline())
+                    data = fobj.readline()
+
+                    # Server has closed the socket?
+                    if not data:
+                        break
+
+                    # Decode the object.
+                    obj = json.loads(data)
 
                     if "stderr" in obj:
                         if obj["data"] is None:
@@ -88,14 +99,21 @@ class Control(object):
                                 sys.stdout.write(data)
 
                     elif "exitcode" in obj:
-                        sys.exit(obj["exitcode"])
+                        exitcode = obj["exitcode"]
 
                 if sys.stdin in to_read:
+
                     data = os.read(sys.stdin.fileno(), 4096)
-                    fobj.write(data)
-                    fobj.flush()
+                    if data:
+                        fobj.write(data)
+                        fobj.flush()
+                    else:
+                        # We don't close the socket.
+                        read_set.remove(sys.stdin)
 
         except IOError:
             # Socket eventually will be closed.
             # This is a clean exit scenario.
-            sys.exit(0)
+            pass
+
+        sys.exit(exitcode)
