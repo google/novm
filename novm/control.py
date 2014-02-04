@@ -1,37 +1,35 @@
 """
-Console functions.
+Control functions.
 """
 import os
 import socket
-import shutil
 import select
 import json
 import binascii
 import sys
 
 from . import utils
-from . import device
-from . import virtio
 
 class Control(object):
 
     def __init__(
             self,
-            pid,
+            path,
             bind=False,
             **kwargs):
 
         super(Control, self).__init__(**kwargs)
 
-        try:
-            os.makedirs("/var/run/novm")
-        except OSError:
-            # Exists.
-            pass
+        dirname = os.path.dirname(path)
+        if not os.path.exists(dirname) or not os.path.isdir(dirname):
+            try:
+                os.makedirs(dirname)
+            except OSError:
+                # Did we catch a race condition?
+                if not os.path.exists(dirname) or not os.path.isdir(dirname):
+                    raise
 
-        path = "/var/run/novm/%s.ctrl" % pid
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-
         if bind:
             if os.path.exists(path):
                 os.remove(path)

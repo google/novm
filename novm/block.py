@@ -6,6 +6,8 @@ from . import virtio
 
 class Disk(virtio.Device):
 
+    """ A Virtio block device. """
+
     virtio_driver = "block"
 
     def __init__(

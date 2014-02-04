@@ -9,7 +9,7 @@ import thread
 import zipfile
 import traceback
 
-def raise_exception(signo, frame):
+def raise_exception(*args):
     thread.exit()
 
 def cleanup(fcn=None, *args, **kwargs):
@@ -117,7 +117,12 @@ def libexec(name):
     bindir = os.path.dirname(sys.argv[0])
     binname = os.path.basename(sys.argv[0])
     libexec_dir = os.path.join(bindir, "..", "lib", binname, "libexec")
-    return os.path.abspath(os.path.join(libexec_dir, name))
+    libexec_path = os.path.abspath(os.path.join(libexec_dir, name))
+    if os.path.exists(libexec_path):
+        return libexec_path
+    else:
+        alt_dir = os.path.join(bindir, "..", "bin")
+        return os.path.abspath(os.path.join(alt_dir, name))
 
 def asbool(value):
     if value is None:

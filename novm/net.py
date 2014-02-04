@@ -57,6 +57,8 @@ def tap_device(name):
 
 class Nic(virtio.Device):
 
+    """ A Virtio network device. """
+
     virtio_driver = "net"
 
     def __init__(
@@ -123,12 +125,18 @@ class Nic(virtio.Device):
                 dnsmasq_opts,
                 preexec_fn=utils.cleanup,
                 close_fds=True)
+            self._ip = address
+        else:
+            self._ip = None
 
     def data(self):
         return {
             "mac": self._info["mac"],
             "fd": self._tap.fileno(),
         }
+
+    def ip(self):
+        return self._ip
 
     def info(self):
         return self._info

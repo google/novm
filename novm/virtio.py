@@ -28,6 +28,10 @@ class Device(device.Device):
             self._interrupt = 32 + index
 
     @property
+    def virtio_driver(self):
+        raise NotImplementedError()
+
+    @property
     def driver(self):
         if self._pci:
             return "virtio-pci-%s" % self.virtio_driver

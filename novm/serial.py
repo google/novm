@@ -1,15 +1,12 @@
 """
 Console functions.
 """
-import os
-import socket
-import shutil
-
-from . import utils
 from . import device
 from . import virtio
 
 class Console(virtio.Device):
+
+    """ A Virtio serial/console device. """
 
     virtio_driver = "console"
 

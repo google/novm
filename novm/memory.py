@@ -42,35 +42,3 @@ class UserMemory(device.Device):
 
     def info(self):
         return self._size
-
-class Com1(device.Device):
-
-    driver = "uart"
-
-    def data(self):
-        return {
-            "address": 0x3f8,
-            "interrupt": 4,
-        }
-
-    def cmdline(self):
-        return "console=uart,io,0x3f8"
-
-    def info(self):
-        return "com1"
-
-class Com2(device.Device):
-
-    driver = "uart"
-
-    def data(self):
-        return {
-            "address": 0x2f8,
-            "interrupt": 3,
-        }
-
-    def cmdline(self):
-        return "console=uart,io,0x2f8"
-
-    def info(self):
-        return "com2"

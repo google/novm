@@ -29,7 +29,7 @@ class NovmManager(object):
 
     def __init__(self, root=None):
         if root is None:
-            root = os.getenv(
+            self._root = os.getenv(
                 "NOVM_ROOT",
                 os.path.join(
                     os.environ["HOME"],
@@ -38,17 +38,19 @@ class NovmManager(object):
         self._instances = db.Nodb(
             os.getenv(
                 "NOVM_INSTANCES",
-                os.path.join(root, "instances")))
+                os.path.join(self._root, "instances")))
 
         self._packs = db.Nodb(
             os.getenv(
                 "NOVM_PACKS",
-                os.path.join(root, "packs")))
+                os.path.join(self._root, "packs")))
 
         self._kernels = db.Nodb(
             os.getenv(
                 "NOVM_KERNELS",
-                os.path.join(root, "kernels")))
+                os.path.join(self._root, "kernels")))
+
+        self._controls = os.path.join(self._root, "control")
 
     def create(self,
             name=cli.StrOpt("The instance name."),
@@ -244,7 +246,8 @@ class NovmManager(object):
             ]))
 
             # Add our control socket.
-            ctrl = control.Control(os.getpid(), bind=True)
+            ctrl_path = os.path.join(self._controls, "%s.ctrl" % str(os.getpid()))
+            ctrl = control.Control(ctrl_path, bind=True)
             args.extend(["-controlfd=%d" % ctrl.fd()])
 
             # Construct our cmdline.
@@ -265,14 +268,17 @@ class NovmManager(object):
                 "kernel": kernel,
                 "devices": [
                     (dev.__class__.__name__, dev.info())
-                    for dev in devices if dev
+                    for dev in devices
+                    if dev.info()
                 ],
+                "ips": [
+                    dev.ip()
+                    for dev in devices
+                    if isinstance(dev, net.Nic) and dev.ip()
+                ]
             }
             self._instances.add(str(os.getpid()), info)
             utils.cleanup(self._instances.remove, str(os.getpid()))
-
-            # Show our final command.
-            sys.stderr.write("exec: %s\n" % " ".join(args))
 
             # Close off final descriptors.
             if not nofork:
@@ -296,7 +302,8 @@ class NovmManager(object):
                 sys.exit(1)
             else:
                 # Raise in the main thread.
-                raise sys.exc_info()
+                exc_info = sys.exc_info()
+                raise exc_info[0], exc_info[1], exc_info[2]
 
     def run(self,
             id=cli.StrOpt("The instance id."),
@@ -304,23 +311,23 @@ class NovmManager(object):
             *command):
 
         """ Execute a command inside a novm. """
-        ctrl = control.Control(
-                self._instances.find(obj_id=id, name=name),
-                bind=False)
+        obj_id = self._instances.find(obj_id=id, name=name)
+        ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
+        ctrl = control.Control(ctrl_path, bind=False)
         return ctrl.run(command)
+
+    def cleanup(self,
+            id=cli.StrOpt("The instance id."),
+            name=cli.StrOpt("The instance name.")):
+
+        """ Remove stale instance information. """
+        # Is this process still around?
+        self._instances.remove(obj_id=id, name=name)
 
     def list(self,
             devices=cli.BoolOpt("Include device info?")):
 
         """ List running instances. """
-        for instance in self._instances.list():
-            try:
-                # Is this process still around?
-                os.kill(int(instance), 0)
-            except OSError:
-                self._instances.remove(obj_id=instance)
-                continue
-
         rval = self._instances.show()
         if not devices:
             # Prune devices, unless requested.
@@ -347,6 +354,8 @@ class NovmManager(object):
         return self._packs.fetch(url, name=name)
 
     def mkpack(self,
+            id=cli.StrOpt("The instance id."),
+            name=cli.StrOpt("The instance name."),
             output=cli.StrOpt("The output file."),
             path=cli.StrOpt("The input path."),
             exclude=cli.ListOpt("Subpaths to exclude."),
@@ -355,7 +364,14 @@ class NovmManager(object):
         if output is None:
             output = tempfile.mktemp()
         if path is None:
-            path = os.getcwd()
+            if id is not None or name is not None:
+                # Is it an instance they want?
+                obj_id = self._instances.find(obj_id=id, name=name)
+                path = self._instances.file(obj_id)
+            else:
+                # Otherwise, use the current dir.
+                path = os.getcwd()
+
         utils.packdir(path, output, exclude=exclude, include=include)
         return "file://%s" % os.path.abspath(output)
 

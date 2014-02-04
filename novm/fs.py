@@ -11,18 +11,19 @@ from . import virtio
 
 class FS(virtio.Device):
 
+    """ Virtio Filesystem (plan9) """
+
     virtio_driver = "fs"
 
     def __init__(
             self,
-            index=None,
             tag=None,
             tempdir=None,
             read=None,
             write=None,
             **kwargs):
 
-        super(FS, self).__init__(index=index, **kwargs)
+        super(FS, self).__init__(**kwargs)
 
         if tag is None:
             tag = str(uuid.uuid4())
