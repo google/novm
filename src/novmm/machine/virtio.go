@@ -11,8 +11,17 @@ static inline int vring_get_buf(
     __u16* used_event) {
 
     if (consumed != vring->avail->idx) {
+
+        if (consumed+1 < vring->avail->idx) {
+            vring->used->flags = VRING_USED_F_NO_NOTIFY;
+        } else {
+            vring->used->flags = 0;
+            vring_avail_event(vring) = consumed+1;
+        }
+
         *flags = vring->avail->flags;
         *index = vring->avail->ring[consumed%vring->num];
+
         return 1;
     }
 
@@ -46,10 +55,15 @@ static inline void vring_get_index(
 static inline void vring_put_buf(
     struct vring* vring,
     __u16 index,
-    __u32 len) {
+    __u32 len,
+    int* evt_interrupt,
+    int* no_interrupt) {
 
     vring->used->ring[vring->used->idx%vring->num].id = index;
     vring->used->ring[vring->used->idx%vring->num].len = len;
+    *evt_interrupt = vring_used_event(vring) == vring->used->idx;
+    *no_interrupt = vring->used->flags & VRING_AVAIL_F_NO_INTERRUPT;
+
     asm volatile ("" : : : "memory");
     vring->used->idx += 1;
     asm volatile ("" : : : "memory");
@@ -96,6 +110,13 @@ const (
     VirtioTypeRpMsg    = 7
     VirtioTypeScsi     = 8
     VirtioType9p       = 9
+)
+
+//
+// Generic features.
+//
+const (
+    VirtioRingFEventIdx = 1 << 29
 )
 
 //
@@ -290,13 +311,29 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
             "vqueue#%d outgoing slot [%d]",
             vchannel.channelno,
             buf.index)
+
+        var evt_interrupt C.int
+        var no_interrupt C.int
         C.vring_put_buf(
             &vchannel.vring,
             C.__u16(buf.index),
-            C.__u32(buf.length))
+            C.__u32(buf.length),
+            &evt_interrupt,
+            &no_interrupt)
 
-        // Interrupt the guest.
-        vchannel.Interrupt()
+        if vchannel.HasFeatures(VirtioRingFEventIdx) {
+            // This is used the event index.
+            if evt_interrupt != C.int(0) {
+                // Interrupt the guest.
+                vchannel.Interrupt()
+            }
+        } else {
+            // We have no event index.
+            if no_interrupt == C.int(0) {
+                // Interrupt the guest.
+                vchannel.Interrupt()
+            }
+        }
     }
 
     return nil
@@ -599,6 +636,7 @@ func NewVirtioDevice(device Device) *VirtioDevice {
     virtio.Config = make(Ram, 0, 0)
     virtio.Channels = make(map[uint]*VirtioChannel)
     virtio.IsrStatus.readclr = 0x1
+    virtio.SetFeatures(VirtioRingFEventIdx)
     return virtio
 }
 
@@ -686,7 +724,7 @@ func NewMmioVirtioDevice(
 }
 
 func (virtio *VirtioDevice) SetFeatures(features uint32) {
-    virtio.HostFeatures.Value = uint64(features)
+    virtio.HostFeatures.Value = virtio.HostFeatures.Value | uint64(features)
 }
 
 func (virtio *VirtioDevice) HasFeatures(features uint32) bool {
