@@ -44,9 +44,11 @@ class Control(object):
     def fd(self):
         return self._sock.fileno()
 
-    def run(self, command, environment=None, cwd="/"):
+    def run(self, command, environment=None, cwd=None):
         if environment is None:
             environment = os.environ
+        if cwd is None:
+            cwd = "/"
 
         fobj = self._sock.makefile()
         fobj.write("NOVM RUN\n")
@@ -55,13 +57,14 @@ class Control(object):
         # This is actually a pass-through for the
         # guest Server.Start() command, although we
         # don't get to see the result.
-        json.dump({
+        start_cmd = {
             "command": command,
             "environment": [
                 "%s=%s" % (k,v) for (k,v) in environment.items()
             ],
             "cwd": cwd
-        }, fobj)
+        }
+        json.dump(start_cmd, fobj)
         fobj.flush()
 
         # Check for a basic error.

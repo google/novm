@@ -308,13 +308,20 @@ class NovmManager(object):
     def run(self,
             id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name."),
+            env=cli.ListOpt("Specify an environment variable."),
+            cwd=cli.StrOpt("The process working directory."),
             *command):
 
         """ Execute a command inside a novm. """
+        if len(env) == 0:
+            env = None
+
         obj_id = self._instances.find(obj_id=id, name=name)
+
         ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
         ctrl = control.Control(ctrl_path, bind=False)
-        return ctrl.run(command)
+
+        return ctrl.run(command, environment=env, cwd=cwd)
 
     def cleanup(self,
             id=cli.StrOpt("The instance id."),
