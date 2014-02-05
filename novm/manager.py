@@ -430,7 +430,7 @@ class NovmManager(object):
             vmlinux = vmlinux_file.name
         if setup is None:
             setup_file = tempfile.NamedTemporaryFile()
-            setup_file.write(open(bzimage, 'r+b').read(4096))
+            setup_file.write(open(bzimage, 'rb').read(4096))
             setup = setup_file.name
         if sysmap is None:
             sysmap = "/boot/System.map-%s" % release

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 if [ "$#" -gt "0" ]; then
     RELEASE=$1
     shift
@@ -8,4 +10,5 @@ else
 fi
 
 DIRNAME=$(dirname $0)
-$DIRNAME/novm getkernel --url $($DIRNAME/novm mkkernel --release=$RELEASE "$@")
+URL=$(PATH=$PATH:/sbin:/usr/sbin fakeroot $DIRNAME/novm mkkernel --release=$RELEASE "$@")
+$DIRNAME/novm getkernel --url $URL
