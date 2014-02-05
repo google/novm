@@ -7,6 +7,8 @@ import select
 import json
 import binascii
 import sys
+import termios
+import tty
 
 from . import utils
 
@@ -50,6 +52,9 @@ class Control(object):
         fobj.write("NOVM RUN\n")
 
         # Write the initial run command.
+        # This is actually a pass-through for the
+        # guest Server.Start() command, although we
+        # don't get to see the result.
         json.dump({
             "command": command,
             "environment": [
@@ -59,15 +64,17 @@ class Control(object):
         }, fobj)
         fobj.flush()
 
-        # Read the initial result.
-        res = json.loads(fobj.readline())
-        if not "pid" in res:
-            raise Exception(res)
-
-        # Our process exitcode.
-        exitcode = 0
+        # Check for a basic error.
+        obj = json.loads(fobj.readline())
+        if obj is not None:
+            raise Exception(obj)
 
         try:
+            # Save our terminal attributes and
+            # enable raw mode for the terminal.
+            orig_tc_attrs = termios.tcgetattr(0)
+            tty.setraw(0)
+
             # Poll and transform the event stream.
             # This will basically turn this process
             # into a proxy for the remote process.
@@ -76,44 +83,37 @@ class Control(object):
                 to_read, _, _ = select.select(read_set, [], [])
 
                 if fobj in to_read:
-                    data = fobj.readline()
-
-                    # Server has closed the socket?
-                    if not data:
-                        break
-
                     # Decode the object.
-                    obj = json.loads(data)
+                    obj = json.loads(fobj.readline())
 
-                    if "stderr" in obj:
-                        if obj["data"] is None:
-                            if obj.get("stderr"):
-                                sys.stderr.close()
-                            else:
-                                sys.stdout.close()
-                        else:
-                            data = binascii.a2b_base64(obj["data"])
-                            if obj.get("stderr"):
-                                sys.stderr.write(data)
-                            else:
-                                sys.stdout.write(data)
+                    if obj is None:
+                        sys.stdout.close()
 
-                    elif "exitcode" in obj:
-                        exitcode = obj["exitcode"]
+                    elif isinstance(obj, str) or isinstance(obj, unicode):
+                        data = binascii.a2b_base64(obj)
+                        sys.stdout.write(data)
+                        sys.stdout.flush()
+
+                    elif isinstance(obj, int):
+                        sys.exit(obj)
 
                 if sys.stdin in to_read:
 
                     data = os.read(sys.stdin.fileno(), 4096)
                     if data:
-                        fobj.write(data)
-                        fobj.flush()
-                    else:
+                        data = binascii.b2a_base64(data)
+                    json.dump(data, fobj)
+                    fobj.flush()
+                    if not data:
                         # We don't close the socket.
+                        # We simply stop sending data.
                         read_set.remove(sys.stdin)
 
         except IOError:
-            # Socket eventually will be closed.
-            # This is a clean exit scenario.
-            pass
+            # We don't expect the socket to be closed.
+            # This is not a normal exit scenario (anymore).
+            sys.exit(1)
 
-        sys.exit(exitcode)
+        finally:
+            # Restore all of our original terminal attributes.
+            termios.tcsetattr(0, termios.TCSAFLUSH, orig_tc_attrs)

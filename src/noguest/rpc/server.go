@@ -11,10 +11,8 @@ import (
 
 type Process struct {
 
-    // The pipes.
-    stdin  *os.File
-    stdout *os.File
-    stderr *os.File
+    // The terminal.
+    terminal *os.File
 
     // The start time.
     starttime time.Time
@@ -56,21 +54,9 @@ func (process *Process) close() {
     process.cond.L.Lock()
     defer process.cond.L.Unlock()
 
-    if process.stdin != nil {
-        process.stdin.Close()
-        process.stdin = nil
-    }
-    if process.stdout != nil {
-        process.stdout.Close()
-        process.stdout = nil
-    }
-    if process.stderr != nil {
-        process.stderr.Close()
-        process.stderr = nil
-    }
-
     // Simulate an exit.
     process.setExitcode(1)
+    process.terminal.Close()
 }
 
 type Server struct {

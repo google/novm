@@ -13,24 +13,13 @@ import (
     "syscall"
 )
 
-type DataEvent struct {
-
-    // The data.
-    Data []byte `json:"data"`
-
-    // Should the file be closed?
-    Close bool `json:"closed"`
-
-    // Is this from stderr?
-    Stderr bool `json:"stderr"`
-}
-
 func handleConn(
     conn_fd int,
     server *rpc.Server,
     client *rpc.Client) {
 
     control_file := os.NewFile(uintptr(conn_fd), "control")
+    defer control_file.Close()
 
     // Read single header.
     reader := bufio.NewReader(control_file)
@@ -52,6 +41,7 @@ func handleConn(
 
         decoder := json.NewDecoder(reader)
         encoder := json.NewEncoder(control_file)
+
         var start noguest.StartCommand
         err := decoder.Decode(&start)
         if err != nil {
@@ -68,11 +58,14 @@ func handleConn(
             return
         }
 
-        // Encode the result.
-        encoder.Encode(&result)
-
+        // Save our pid.
         pid := result.Pid
-        finished := make(chan error)
+        inputs := make(chan error)
+        outputs := make(chan error)
+        exitcode := make(chan int)
+
+        // This indicates we're okay.
+        encoder.Encode(nil)
 
         // Wait for the process to exit.
         go func() {
@@ -81,72 +74,74 @@ func handleConn(
             }
             var wait_result noguest.WaitResult
             err := client.Call("Server.Wait", &wait, &wait_result)
-            encoder.Encode(&wait_result)
-            finished <- err
+            if err != nil {
+                exitcode <- 1
+            } else {
+                exitcode <- wait_result.Exitcode
+            }
         }()
 
         // Read from stdout & stderr.
-        read_fn := func(stderr bool) {
+        go func() {
             read := noguest.ReadCommand{
-                Pid:    pid,
-                Stderr: stderr,
-                N:      4096,
-            }
-            data_event := &DataEvent{
-                Stderr: stderr,
-                Close:  false,
+                Pid: pid,
+                N:   4096,
             }
             var read_result noguest.ReadResult
-            var err error
             for {
-                err = client.Call("Server.Read", &read, &read_result)
-                data_event.Data = read_result.Data
-                if err != nil || read_result.Data == nil {
-                    data_event.Close = true
+                err := client.Call("Server.Read", &read, &read_result)
+                if err != nil {
+                    inputs <- err
+                    return
                 }
-                encoder.Encode(&data_event)
-                if data_event.Close {
-                    break
+                err = encoder.Encode(read_result.Data)
+                if err != nil {
+                    inputs <- err
+                    return
                 }
             }
-            finished <- err
-        }
-        go read_fn(false)
-        go read_fn(true)
+        }()
 
         // Write to stdin.
         go func() {
             write := noguest.WriteCommand{
                 Pid: pid,
             }
-            buffer := make([]byte, 4096, 4096)
             var write_result noguest.WriteResult
             for {
-                n, err := reader.Read(buffer)
-                if n > 0 {
-                    write.Data = buffer[:n]
-                }
-                for n > 0 {
-                    err := client.Call("Server.Write", &write, &write_result)
-                    if err != nil {
-                        finished <- err
-                        break
-                    }
-                    write.Data = write.Data[write_result.Written:]
-                    n -= write_result.Written
-                }
+                err := decoder.Decode(&write.Data)
                 if err != nil {
-                    finished <- err
-                    break
+                    outputs <- err
+                    return
+                }
+                err = client.Call("Server.Write", &write, &write_result)
+                if err != nil {
+                    outputs <- err
+                    return
                 }
             }
         }()
 
-        // Wait for all the above to finish.
-        <-finished
-        <-finished
-        <-finished
-        <-finished
+        select {
+        case <-inputs:
+            // Keep going.
+            break
+
+        case <-outputs:
+            // Sever the connection.
+            return
+        }
+
+        select {
+        case status := <-exitcode:
+            // Encode the exit code.
+            encoder.Encode(status)
+            break
+
+        case <-outputs:
+            // Sever the connection.
+            return
+        }
 
     } else if header == "NOVM RPC" {
 

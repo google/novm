@@ -1,16 +1,9 @@
 package rpc
 
-import (
-    "os"
-)
-
 type ReadCommand struct {
 
     // The relevant pid.
     Pid int `json:"pid"`
-
-    // Stdin or stderr?
-    Stderr bool `json:"stderr"`
 
     // How much to read?
     N   uint `json:"n"`
@@ -28,38 +21,18 @@ func (server *Server) Read(
 
     process := server.lookup(read.Pid)
     if process == nil {
-        result.Data = nil
+        result.Data = []byte{}
         return nil
     }
 
-    var file *os.File
-    if read.Stderr {
-        file = process.stderr
+    // Read available data.
+    buffer := make([]byte, read.N, read.N)
+    n, err := process.terminal.Read(buffer)
+    if n > 0 {
+        result.Data = buffer[:n]
     } else {
-        file = process.stdout
+        result.Data = []byte{}
     }
 
-    if file == nil {
-        result.Data = nil
-    } else {
-        buffer := make([]byte, read.N, read.N)
-        n, err := file.Read(buffer)
-        if n > 0 {
-            result.Data = buffer[:n]
-        } else {
-            process.cond.L.Lock()
-            if read.Stderr {
-                process.stderr.Close()
-                process.stderr = nil
-            } else {
-                process.stdout.Close()
-                process.stdout = nil
-            }
-            process.cond.L.Unlock()
-            result.Data = nil
-            return err
-        }
-    }
-
-    return nil
+    return err
 }
