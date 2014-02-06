@@ -94,7 +94,7 @@ func NewVirtioMmioFs(info *DeviceInfo) (Device, error) {
 }
 
 func NewVirtioPciFs(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p)
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p, 4)
     if err != nil {
         return nil, err
     }

@@ -114,7 +114,7 @@ func NewVirtioMmioBlock(info *DeviceInfo) (Device, error) {
 }
 
 func NewVirtioPciBlock(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassStorage, VirtioTypeBlock)
+    device, err := NewPciVirtioDevice(info, PciClassStorage, VirtioTypeBlock, 2)
     device.Channels[0] = device.NewVirtioChannel(256)
     return &VirtioBlockDevice{VirtioDevice: device}, err
 }

@@ -134,7 +134,7 @@ type VirtioNotification struct {
 type VirtioChannel struct {
     *VirtioDevice
 
-    // Our channel number (set in Init().
+    // Our channel number (set in Init()).
     channelno uint
 
     // Our channels.
@@ -163,6 +163,10 @@ type VirtioChannel struct {
 
     // The address written.
     QueueAddress Register `json:"queue-address"`
+
+    // Our MSI-X Vectors.
+    CfgVec   Register `json:"config-vector"`
+    QueueVec Register `json:"queue-vector"`
 
     // Our underlying ring.
     vring C.struct_vring
@@ -256,7 +260,7 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
 
                 // Interrupt the guest?
                 if buf_flags == C.__u16(0) {
-                    vchannel.Interrupt()
+                    vchannel.Interrupt(true)
                 }
                 break
 
@@ -325,18 +329,37 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
             // This is used the event index.
             if evt_interrupt != C.int(0) {
                 // Interrupt the guest.
-                vchannel.Interrupt()
+                vchannel.Interrupt(true)
             }
         } else {
             // We have no event index.
             if no_interrupt == C.int(0) {
                 // Interrupt the guest.
-                vchannel.Interrupt()
+                vchannel.Interrupt(true)
             }
         }
     }
 
     return nil
+}
+
+func (vchannel *VirtioChannel) Interrupt(queue bool) {
+    if vchannel.VirtioDevice.IsMSIXEnabled() {
+        if queue {
+            // Send on the specified queue vector.
+            if vchannel.QueueVec.Value != 0xffff {
+                vchannel.VirtioDevice.msix.SendMSIXInterrupt(int(vchannel.QueueVec.Value))
+            }
+        } else {
+            // Send on the specified config vector.
+            if vchannel.CfgVec.Value != 0xffff {
+                vchannel.VirtioDevice.msix.SendMSIXInterrupt(int(vchannel.CfgVec.Value))
+            }
+        }
+    }
+
+    // Just send a standard interrupt.
+    vchannel.VirtioDevice.Interrupt()
 }
 
 //
@@ -347,6 +370,9 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
 //
 type VirtioDevice struct {
     Device
+
+    // Our MSI device, if valid.
+    msix *MsiXDevice
 
     // Our channels.
     // We expect that these will be configured
@@ -425,15 +451,21 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
         return reg.IsrStatus.Read(0, size)
 
     default:
-        if reg.VirtioDevice.IsMSIEnabled() {
+        if reg.VirtioDevice.IsMSIXEnabled() {
             switch offset {
             case VirtioOffsetCfgVec:
+                if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+                    return queue.CfgVec.Read(0, size)
+                }
                 return math.MaxUint64, nil
             case VirtioOffsetQueueVec:
+                if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+                    return queue.QueueVec.Read(0, size)
+                }
                 return math.MaxUint64, nil
             default:
                 reg.Debug(
-                    "read device @ %x->%x (msi-enabled)",
+                    "virtio read @ %x->%x (msi-enabled)",
                     offset,
                     offset-VirtioOffsetQueueVec-1)
                 return reg.VirtioDevice.Config.Read(
@@ -442,7 +474,7 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
             }
         } else {
             reg.Debug(
-                "read device @ %x->%x (no-msi-enabled)",
+                "virtio read @ %x->%x (no-msi-enabled)",
                 offset,
                 offset-VirtioOffsetIsr-1)
             return reg.VirtioDevice.Config.Read(
@@ -522,15 +554,21 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
         return reg.IsrStatus.Write(0, size, value)
 
     default:
-        if reg.VirtioDevice.IsMSIEnabled() {
+        if reg.VirtioDevice.IsMSIXEnabled() {
             switch offset {
             case VirtioOffsetCfgVec:
+                if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+                    return queue.CfgVec.Write(0, size, value)
+                }
                 return nil
             case VirtioOffsetQueueVec:
+                if queue, ok := reg.VirtioDevice.Channels[uint(reg.QueueSelect.Value)]; ok {
+                    return queue.QueueVec.Write(0, size, value)
+                }
                 return nil
             default:
                 reg.Debug(
-                    "write device @ %x->%x (msi-enabled)",
+                    "virtio write @ %x->%x (msi-enabled)",
                     offset,
                     offset-VirtioOffsetQueueVec-1)
                 return reg.VirtioDevice.Config.Write(
@@ -540,7 +578,7 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
             }
         } else {
             reg.Debug(
-                "write device @ %x->%x (no-msi-enabled)",
+                "virtio write @ %x->%x (no-msi-enabled)",
                 offset,
                 offset-VirtioOffsetIsr-1)
             return reg.VirtioDevice.Config.Write(
@@ -648,7 +686,8 @@ const VirtioPciVendor = 0x1af4
 func NewPciVirtioDevice(
     info *DeviceInfo,
     class PciClass,
-    subsystem_id uint16) (*VirtioDevice, error) {
+    subsystem_id uint16,
+    vectors uint) (*VirtioDevice, error) {
 
     // Allocate our pci device.
     device, err := NewPciDevice(
@@ -663,11 +702,12 @@ func NewPciVirtioDevice(
         return nil, err
     }
 
-    virtio := NewVirtioDevice(device)
-    device.BarSizes[0] = platform.PageSize
-    device.BarOps[0] = &VirtioConf{virtio}
+    msix_device := NewMsiXDevice(device, 5, vectors)
+    virtio := NewVirtioDevice(msix_device)
+    device.PciBarSizes[0] = platform.PageSize
+    device.PciBarOps[0] = &VirtioConf{virtio}
 
-    return virtio, device.Init(info)
+    return virtio, msix_device.Init(info)
 }
 
 type VirtioMmioConf struct {
@@ -751,18 +791,19 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
         }
     }
 
+    // See if our device is an MSI device.
+    virtio.msix, _ = virtio.Device.(*MsiXDevice)
+
     return virtio.Device.Attach(vm, model)
 }
 
-func (virtio *VirtioDevice) IsMSIEnabled() bool {
-    pcidevice, ok := virtio.Device.(*PciDevice)
-    if ok {
-        return pcidevice.IsMSIEnabled()
-    }
-    return false
+func (virtio *VirtioDevice) IsMSIXEnabled() bool {
+    return virtio.msix != nil && virtio.msix.IsMSIXEnabled()
 }
 
 func (virtio *VirtioDevice) Interrupt() error {
+    // Just send a standrd interrupt,
+    // with an updated status register.
     virtio.IsrStatus.Value = virtio.IsrStatus.Value | 0x1
     return virtio.Device.Interrupt()
 }

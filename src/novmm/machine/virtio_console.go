@@ -161,7 +161,7 @@ func NewVirtioMmioConsole(info *DeviceInfo) (Device, error) {
 }
 
 func NewVirtioPciConsole(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioTypeConsole)
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioTypeConsole, 8)
     if err != nil {
         return nil, err
     }

@@ -1,5 +1,9 @@
 package machine
 
+const (
+    PciCapabilityPortRoot = 0x40
+)
+
 func NewPciHostBridge(info *DeviceInfo) (Device, error) {
 
     // Create a bus device.
@@ -14,14 +18,14 @@ func NewPciHostBridge(info *DeviceInfo) (Device, error) {
     if err != nil {
         return nil, err
     }
-    hostbridge.Config[0x6] = 0x10 // Caps present.
-    hostbridge.Config[0xe] = 1    // Type.
 
-    // Add our capabilities.
-    hostbridge.Config.GrowTo(0x42)
-    hostbridge.Config[0x34] = 0x40 // Cap pointer.
-    hostbridge.Config[0x40] = 0x40 // Type port root.
-    hostbridge.Config[0x41] = 0x0  // End of cap pointer.
+    // Set our type.
+    hostbridge.Config[0xe] = 1
+
+    // Add our PortRoot capability.
+    hostbridge.Capabilities[PciCapabilityPortRoot] = &PciCapability{
+        Size: 0,
+    }
 
     // Done.
     return hostbridge, nil

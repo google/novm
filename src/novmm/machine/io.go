@@ -120,9 +120,10 @@ func (io *IoHandler) Run() {
 
             // Debug?
             io.Debug(
-                "write %x @ %x",
+                "write %x @ %x [size: %d]",
                 val,
-                io.start.After(req.offset))
+                io.start.After(req.offset),
+                size)
 
         } else {
             val, err := io.operations.Read(req.offset, size)
@@ -135,9 +136,10 @@ func (io *IoHandler) Run() {
 
             // Debug?
             io.Debug(
-                "read %x @ %x",
+                "read %x @ %x [size: %d]",
                 val,
-                io.start.After(req.offset))
+                io.start.After(req.offset),
+                size)
         }
     }
 }

@@ -50,7 +50,7 @@ func NewVirtioMmioNet(info *DeviceInfo) (Device, error) {
 }
 
 func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet)
+    device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet, 4)
     device.Channels[0] = device.NewVirtioChannel(256)
     device.Channels[1] = device.NewVirtioChannel(256)
     return &VirtioNetDevice{VirtioDevice: device}, err
