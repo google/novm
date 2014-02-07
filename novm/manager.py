@@ -24,6 +24,7 @@ from . import clock
 from . import pci
 from . import cpu
 from . import control
+from . import docker
 
 class NovmManager(object):
 
@@ -51,6 +52,10 @@ class NovmManager(object):
                 os.path.join(self._root, "kernels")))
 
         # Our docker images.
+        # This is cached because docker images
+        # will form a tree. We essentially build
+        # a list of paths for every docker repo
+        # that the user specifies.
         self._docker = db.Nodb(
             os.getenv(
                 "NOVM_DOCKER",
@@ -66,6 +71,7 @@ class NovmManager(object):
             nic=cli.ListOpt("Define a network device."),
             disk=cli.ListOpt("Define a block device."),
             pack=cli.ListOpt("Use a given read pack."),
+            repo=cli.ListOpt("Use a docker repository."),
             read=cli.ListOpt("Define a backing filesystem read tree."),
             write=cli.ListOpt("Define a backing filesystem write tree."),
             nopci=cli.BoolOpt("Disable PCI devices?"),
@@ -115,9 +121,9 @@ class NovmManager(object):
 
                 temp_dir=>/
 
-        Docker definitions are provided as follows.
+        Docker repositories are provided as follows.
 
-            docker:<repository[:tag]>[,key=value]
+            <repository[:tag]>[,key=value]
 
             You should specify at least username, password.
         """
@@ -230,6 +236,15 @@ class NovmManager(object):
             for p in pack:
                 read.append(self._packs.file(p))
 
+            # Add our docker repositories.
+            # NOTE: These are also all relative to root.
+            for d in repo:
+                opts = d.split(",")
+                repository = opts[0]
+                kwargs = dict([arg.split("=", 1) for arg in opts[1:]])
+                client = docker.RegistryClient(self._docker, **kwargs)
+                read.extend(client.pull_repository(repository))
+
             # The root filesystem.
             devices.append(fs.FS(
                 index=1+len(nic)+len(disk),
@@ -237,8 +252,7 @@ class NovmManager(object):
                 tag="root",
                 tempdir=self._instances.file(str(os.getpid())),
                 read=read,
-                write=write,
-                dockerdb=self._docker))
+                write=write))
 
             # Add noguest as our init.
             devices.append(fs.FS(
