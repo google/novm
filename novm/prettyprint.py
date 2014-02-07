@@ -1,6 +1,7 @@
 """
 Pretty-printing.
 """
+import time
 import types
 
 def prettyprint(value, output):
@@ -40,28 +41,30 @@ def prettyprint(value, output):
         for k, v in zip(keys, values):
             v["id"] = k
 
-        def format_entry(entry):
-            if isinstance(entry, types.ListType):
-                return ",".join([str(x) for x in entry])
+        def format_entry(k, v):
+            if isinstance(v, types.FloatType) and k == "timestamp":
+                return time.ctime(v)
+            elif isinstance(v, types.ListType):
+                return ",".join([str(x) for x in v])
             else:
-                return str(entry)
+                return str(v)
 
         # Compute column widths.
         max_width = {}
-        for v in values:
-            for k, kv in v.items():
+        for entry in values:
+            for k, v in entry.items():
                 max_width[k] = max(
                     max_width.get(k, 0),
-                    len(format_entry(kv)),
+                    len(format_entry(k, v)),
                     len(k))
 
         all_keys = max_width.keys()
         all_keys.remove("id")
         all_keys.insert(0, "id")
 
-        def fmt_row(v):
+        def fmt_row(entry):
             cols = " | ".join([
-                ("%%-%ds" % max_width[k]) % format_entry(v.get(k))
+                ("%%-%ds" % max_width[k]) % format_entry(k, entry.get(k))
                 for k in all_keys])
             return "".join(["| ", cols, " |" ])
 
@@ -72,8 +75,8 @@ def prettyprint(value, output):
         output.write(sep_row() + "\n")
         output.write(fmt_row(dict([(k, k) for k in max_width.keys()])) + "\n")
         output.write(sep_row() + "\n")
-        for v in values:
-            output.write(fmt_row(v) + "\n")
+        for entry in values:
+            output.write(fmt_row(entry) + "\n")
         output.write(sep_row() + "\n")
 
     else:

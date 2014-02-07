@@ -345,15 +345,16 @@ class NovmManager(object):
         self._instances.remove(obj_id=id, name=name)
 
     def list(self,
-            devices=cli.BoolOpt("Include device info?")):
+            full=cli.BoolOpt("Include device info?")):
 
         """ List running instances. """
         rval = self._instances.show()
-        if not devices:
-            # Prune devices, unless requested.
+        if not full:
+            # Prune devices, etc. unless requested.
             for value in rval.values():
-                if "devices" in value:
-                    del value["devices"]
+                for k in ("kernel", "devices", "vcpus"):
+                    if k in value:
+                        del value[k]
         for (pid, value) in rval.items():
             # Add information about liveliness.
             if os.path.exists("/proc/%s" % str(pid)):
