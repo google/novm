@@ -41,6 +41,14 @@ func main() {
         }
     }
 
+    // Notify novmm that we're ready.
+    // This is a very simple barrier, but
+    // should be good enough for now.
+    n, err := console.Write([]byte{0x42})
+    if err != nil || n != 1 {
+        log.Fatal(err)
+    }
+
     // Create our RPC server.
     rpc.Run(console)
 }

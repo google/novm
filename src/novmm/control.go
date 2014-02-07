@@ -10,13 +10,14 @@ import (
     "novmm/platform"
     "os"
     "strings"
+    "sync"
     "syscall"
 )
 
 func handleConn(
     conn_fd int,
     server *rpc.Server,
-    client *rpc.Client) {
+    ready func() (*rpc.Client, error)) {
 
     control_file := os.NewFile(uintptr(conn_fd), "control")
     defer control_file.Close()
@@ -46,6 +47,13 @@ func handleConn(
         err := decoder.Decode(&start)
         if err != nil {
             // Poorly encoded command.
+            encoder.Encode(err.Error())
+            return
+        }
+
+        // Grab our client.
+        client, err := ready()
+        if err != nil {
             encoder.Encode(err.Error())
             return
         }
@@ -160,14 +168,40 @@ func serveControl(
     server := rpc.NewServer()
 
     // Bind our client.
-    codec := jsonrpc.NewClientCodec(proxy)
-    client := rpc.NewClientWithCodec(codec)
+    // NOTE: We have this setup as a lazy
+    // function because the guest may take
+    // some small amount of time before its
+    // actually ready to process RPC requests.
+    // But we don't want this to interfere
+    // with our ability to process our host
+    // side RPC requests.
+
+    var client_err error
+    var client_once sync.Once
+    var client_codec rpc.ClientCodec
+    var client *rpc.Client
+
+    barrier := func() {
+        buffer := make([]byte, 1, 1)
+        n, err := proxy.Read(buffer)
+        if n == 1 && err == nil {
+            client_err = nil
+            client_codec = jsonrpc.NewClientCodec(proxy)
+            client = rpc.NewClientWithCodec(client_codec)
+        } else if err != nil {
+            client_err = err
+        }
+    }
+    ready := func() (*rpc.Client, error) {
+        client_once.Do(barrier)
+        return client, client_err
+    }
 
     // Accept clients.
     for {
         nfd, _, err := syscall.Accept(control_fd)
         if err == nil {
-            go handleConn(nfd, server, client)
+            go handleConn(nfd, server, ready)
         }
     }
 }
