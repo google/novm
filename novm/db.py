@@ -63,7 +63,7 @@ class Nodb(object):
                     indent=True)
         except (IOError, OSError):
             # Already exists.
-            return KeyError(obj_id)
+            raise KeyError(obj_id)
 
     def get(self, obj_id=None, **kwargs):
         try:
@@ -72,7 +72,7 @@ class Nodb(object):
                 return json.load(inf)
         except (IOError, OSError):
             # Does not exist.
-            return KeyError(obj_id)
+            raise KeyError(obj_id)
 
     def remove(self, obj_id=None, **kwargs):
         try:
@@ -82,7 +82,7 @@ class Nodb(object):
                 shutil.rmtree(self.file(obj_id))
         except OSError:
             # Does not exist.
-            return KeyError(obj_id)
+            raise KeyError(obj_id)
 
     def find(self, obj_id=None, **kwargs):
         if obj_id is not None:
