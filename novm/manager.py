@@ -50,6 +50,12 @@ class NovmManager(object):
                 "NOVM_KERNELS",
                 os.path.join(self._root, "kernels")))
 
+        # Our docker images.
+        self._docker = db.Nodb(
+            os.getenv(
+                "NOVM_DOCKER",
+                os.path.join(self._root, "docker")))
+
         self._controls = os.path.join(self._root, "control")
 
     def create(self,
@@ -102,12 +108,18 @@ class NovmManager(object):
 
         Write definitions are also provided as a mapping.
 
-            vm_path=>         Map the given path for writes.
+            vm_path=>path         Map the given path for writes.
 
             Note that these is always an implicit write path,
             which is a temporary directory for the instance.
 
                 temp_dir=>/
+
+        Docker definitions are provided as follows.
+
+            docker:<repository[:tag]>[,key=value]
+
+            You should specify at least username, password.
         """
         if vcpus is None:
             vcpus = 1
@@ -225,7 +237,8 @@ class NovmManager(object):
                 tag="root",
                 tempdir=self._instances.file(str(os.getpid())),
                 read=read,
-                write=write))
+                write=write,
+                dockerdb=self._docker))
 
             # Add noguest as our init.
             devices.append(fs.FS(

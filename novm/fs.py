@@ -8,6 +8,7 @@ import shutil
 
 from . import utils
 from . import virtio
+from . import docker
 
 class FS(virtio.Device):
 
@@ -21,6 +22,7 @@ class FS(virtio.Device):
             tempdir=None,
             read=None,
             write=None,
+            dockerdb=None,
             **kwargs):
 
         super(FS, self).__init__(**kwargs)
@@ -43,13 +45,24 @@ class FS(virtio.Device):
         # Append our read mapping.
         self._read = {'/': []}
         for path in read:
-            spec = path.split("=>", 1)
-            if len(spec) == 1:
-                self._read['/'].append(path)
+            # Do we support docker containers?
+            # We accept arguments in the form:
+            #  docker:<repository[:tag]>[,key=value]
+            if dockerdb is not None and path.startswith("docker:"):
+                args = path[7:].split(",")
+                repository = args[0]
+                clientargs = dict([arg.split("=", 1) for arg in args[1:]])
+                client = docker.RegistryClient(dockerdb, **clientargs)
+                self._read['/'].extend(client.pull_repository(repository))
+
             else:
-                if not spec[0] in self._read:
-                    self._read[spec[0]] = []
-                self._read[spec[0]].append(spec[1])
+                spec = path.split("=>", 1)
+                if len(spec) == 1:
+                    self._read['/'].append(path)
+                else:
+                    if not spec[0] in self._read:
+                        self._read[spec[0]] = []
+                    self._read[spec[0]].append(spec[1])
 
         # Append our write mapping.
         self._write = {'/': tempdir}
