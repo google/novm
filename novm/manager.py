@@ -354,6 +354,12 @@ class NovmManager(object):
             for value in rval.values():
                 if "devices" in value:
                     del value["devices"]
+        for (pid, value) in rval.items():
+            # Add information about liveliness.
+            if os.path.exists("/proc/%s" % str(pid)):
+                value["alive"] = True
+            else:
+                value["alive"] = False
         return rval
 
     def packs(self):
