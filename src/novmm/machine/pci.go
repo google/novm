@@ -194,9 +194,6 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
                 return value, err
             }
         }
-
-        reg.PciBus.last.Debug("pci capabilities read failed!")
-        return math.MaxUint64, nil
     }
 
     value, err := reg.PciBus.last.Config.Read(reg.PciBus.Offset, size)
@@ -245,9 +242,6 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
                 return capability.Write(reg.PciBus.Offset-capability.Offset, size, value)
             }
         }
-
-        reg.PciBus.last.Debug("pci capabilities write failed!")
-        return nil
     }
 
     err := reg.PciBus.last.Config.Write(reg.PciBus.Offset, size, value)
@@ -397,7 +391,7 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
     pcidevice.Config[0x6] |= 0x10 // Caps present.
 
     // Construct our pointers.
-    last_pointer := byte(0)
+    last_pointer := byte(0x0)
     consumed := 0x40 // End of regular configuration.
 
     for id, capability := range pcidevice.Capabilities {

@@ -348,12 +348,12 @@ func (vchannel *VirtioChannel) Interrupt(queue bool) {
         if queue {
             // Send on the specified queue vector.
             if vchannel.QueueVec.Value != 0xffff {
-                vchannel.VirtioDevice.msix.SendMSIXInterrupt(int(vchannel.QueueVec.Value))
+                vchannel.VirtioDevice.msix.SendInterrupt(int(vchannel.QueueVec.Value))
             }
         } else {
             // Send on the specified config vector.
             if vchannel.CfgVec.Value != 0xffff {
-                vchannel.VirtioDevice.msix.SendMSIXInterrupt(int(vchannel.CfgVec.Value))
+                vchannel.VirtioDevice.msix.SendInterrupt(int(vchannel.CfgVec.Value))
             }
         }
     }
