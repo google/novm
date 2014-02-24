@@ -213,23 +213,29 @@ func (console *VirtioConsoleDevice) Write(p []byte) (int, error) {
     console.write_lock.Lock()
     defer console.write_lock.Unlock()
 
-    // Always grab a new buffer.
-    buf := <-console.Channels[0].incoming
-
-    // Map as much as possible.
     var n int
-    data := buf.Map(0, len(p))
-    if len(data) < len(p) {
-        n = len(data)
-        copy(data, p[:len(data)])
-    } else {
-        n = len(p)
-        copy(data, p)
-    }
-    buf.length = n
 
-    // Put the buffer back.
-    console.Channels[0].outgoing <- buf
+    for n < len(p) {
+
+        // Always grab a new buffer.
+        buf := <-console.Channels[0].incoming
+
+        // Map as much as needed.
+        left := len(p) - n
+        data := buf.Map(0, left)
+        if len(data) < left {
+            copy(data, p[n:n+len(data)])
+            n += len(data)
+            buf.length = len(data)
+        } else {
+            copy(data, p[n:])
+            n += left
+            buf.length = left
+        }
+
+        // Put the buffer back.
+        console.Channels[0].outgoing <- buf
+    }
 
     // We're done.
     return n, nil
