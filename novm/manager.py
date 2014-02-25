@@ -350,13 +350,24 @@ class NovmManager(object):
 
         return ctrl.run(command, environment=env, cwd=cwd)
 
-    def cleanup(self,
+    def _is_alive(self, pid):
+        """ Is this process still around? """
+        return os.path.exists("/proc/%s" % str(pid))
+
+    def clean(self,
             id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name.")):
 
         """ Remove stale instance information. """
-        # Is this process still around?
         self._instances.remove(obj_id=id, name=name)
+
+    def cleanall(self):
+
+        """ Remove everything not alive. """
+        for pid in self._instances.list():
+            # Is this process still around?
+            if not self._is_alive(pid):
+                self._instances.remove(obj_id=pid)
 
     def list(self,
             full=cli.BoolOpt("Include device info?")):
@@ -371,7 +382,7 @@ class NovmManager(object):
                         del value[k]
         for (pid, value) in rval.items():
             # Add information about liveliness.
-            if os.path.exists("/proc/%s" % str(pid)):
+            if self._is_alive(pid):
                 value["alive"] = True
             else:
                 value["alive"] = False
