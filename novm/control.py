@@ -44,9 +44,9 @@ class Control(object):
     def fd(self):
         return self._sock.fileno()
 
-    def run(self, command, environment=None, cwd=None):
-        if environment is None:
-            environment = os.environ
+    def run(self, command, env=None, cwd=None):
+        if env is None:
+            env = ["%s=%s" % (k,v) for (k,v) in os.environ.items()]
         if cwd is None:
             cwd = "/"
 
@@ -59,9 +59,7 @@ class Control(object):
         # don't get to see the result.
         start_cmd = {
             "command": command,
-            "environment": [
-                "%s=%s" % (k,v) for (k,v) in environment.items()
-            ],
+            "environment": env,
             "cwd": cwd
         }
         json.dump(start_cmd, fobj)

@@ -348,7 +348,7 @@ class NovmManager(object):
         ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
         ctrl = control.Control(ctrl_path, bind=False)
 
-        return ctrl.run(command, environment=env, cwd=cwd)
+        return ctrl.run(command, env=env, cwd=cwd)
 
     def _is_alive(self, pid):
         """ Is this process still around? """
