@@ -370,7 +370,8 @@ class NovmManager(object):
                 self._instances.remove(obj_id=pid)
 
     def list(self,
-            full=cli.BoolOpt("Include device info?")):
+            full=cli.BoolOpt("Include device info?"),
+            alive=cli.BoolOpt("Include only alive instances?")):
 
         """ List running instances. """
         rval = self._instances.show()
@@ -386,6 +387,13 @@ class NovmManager(object):
                 value["alive"] = True
             else:
                 value["alive"] = False
+        if alive:
+            # Filter alive instances.
+            rval = dict([
+                (k, v)
+                for (k, v) in rval.items()
+                if v.get("alive")
+            ])
         return rval
 
     def packs(self):
