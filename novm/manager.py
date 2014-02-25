@@ -195,7 +195,6 @@ class NovmManager(object):
             # Use a PCI bus?
             if not(nopci):
                 devices.append(pci.PciBus())
-                devices.append(pci.PciHostBridge())
 
             # Always enable the console.
             # The noguest binary that executes inside

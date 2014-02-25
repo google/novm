@@ -79,6 +79,7 @@ type PciDevice struct {
     Capabilities map[byte]*PciCapability `json:"capabilities"`
 
     // Bar sizes and operations.
+    PciBarCount uint `json:"-"`
     PciBarSizes `json:"-"`
     PciBarOps   `json:"-"`
 
@@ -247,7 +248,8 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
     err := reg.PciBus.last.Config.Write(reg.PciBus.Offset, size, value)
 
     // Rebuild our BARs?
-    if reg.PciBus.Offset >= 0x10 && reg.PciBus.Offset < 0x28 {
+    if reg.PciBus.Offset >= 0x10 &&
+        reg.PciBus.Offset < uint64(0x10+4*reg.PciBus.last.PciBarCount) {
         reg.PciBus.last.RebuildBars()
         return reg.PciBus.flush()
     }
@@ -275,6 +277,8 @@ func NewPciDevice(
     // Set our configuration space.
     device.Config.Set16(0x0, uint16(vendor_id))
     device.Config.Set16(0x2, uint16(device_id))
+    device.Config.Set16(0x4, 0x143)
+    device.Config.Set16(0x6, 0x0)
     device.Config.Set8(0x8, uint8(revision))
     device.Config.Set8(0x9, uint8(0)) // Prog IF.
     device.Config.Set8(0xa, uint8(0)) // Subclass.
@@ -282,6 +286,10 @@ func NewPciDevice(
     device.Config.Set8(0xe, 0x0) // Type.
     device.Config.Set16(0x2c, subsystem_vendor)
     device.Config.Set16(0x2e, subsystem_id)
+
+    // A default device has 6 bars.
+    // (This is different only for bridges, etc.)
+    device.PciBarCount = 6
 
     // Return the pci device.
     return device, nil
@@ -332,7 +340,7 @@ func (pcidevice *PciDevice) RebuildBars() {
 
     // Build our IO Handlers.
     pcidevice.IoHandlers = make(IoHandlers)
-    for i := uint(0); i < 6; i += 1 {
+    for i := uint(0); i < pcidevice.PciBarCount; i += 1 {
 
         barreg := int(0x10 + (i * 4))
         baraddr := pcidevice.Config.Get32(barreg)
@@ -380,14 +388,8 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // No capabilities to install.
     if len(pcidevice.Capabilities) == 0 {
-        pcidevice.Config[0x6] &= ^byte(0x10)
-        pcidevice.Config[0x34] = 0x00
-        pcidevice.Debug("pci disabled capabilities")
         return
     }
-
-    // Ensure that we have capabilities present.
-    pcidevice.Config[0x6] |= 0x10 // Caps present.
 
     // Construct our pointers.
     last_pointer := byte(0x0)
@@ -409,9 +411,10 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
         }
     }
 
-    // Save the first item.
+    // Save the first item,
+    // and set out capabilities status bit.
     pcidevice.Config[0x34] = last_pointer
-    pcidevice.Debug("pci enabled capabilities")
+    pcidevice.Config[0x6] |= 0x10
 }
 
 func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {

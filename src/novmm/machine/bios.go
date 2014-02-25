@@ -9,13 +9,20 @@ type Bios struct {
 
     // Our reserved high-mem.
     Reserved platform.Paddr `json:"reserved"`
-    TSSAddr  platform.Paddr `json:"tss"`
+
+    // Our reserved TSS (for Intel VTX).
+    TSSAddr platform.Paddr `json:"tss"`
 }
 
 func NewBios(info *DeviceInfo) (Device, error) {
     bios := new(Bios)
+
+    // Sensible default.
     bios.Reserved = 0xf0000000
+
+    // Sensible default.
     bios.TSSAddr = 0xfffbc000
+
     return bios, bios.Init(info)
 }
 

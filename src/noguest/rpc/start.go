@@ -114,7 +114,7 @@ func (server *Server) Start(
     // Open the slave terminal.
     n := bytes.Index(buf, []byte{0})
     slave_pts := string(buf[:n])
-    slave, err := os.OpenFile(slave_pts, syscall.O_RDWR, 0)
+    slave, err := os.OpenFile(slave_pts, syscall.O_RDWR|syscall.O_NOCTTY, 0)
     if err != nil {
         terminal.Close()
         result.Pid = -1
