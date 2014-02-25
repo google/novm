@@ -50,7 +50,7 @@ class Control(object):
         if cwd is None:
             cwd = "/"
 
-        fobj = self._sock.makefile()
+        fobj = self._sock.makefile(bufsize=0)
         fobj.write("NOVM RUN\n")
 
         # Write the initial run command.
@@ -70,6 +70,9 @@ class Control(object):
         if obj is not None:
             raise Exception(obj)
 
+        # Remember our exitcode.
+        exitcode = 1
+
         try:
             # Save our terminal attributes and
             # enable raw mode for the terminal.
@@ -80,6 +83,7 @@ class Control(object):
             # This will basically turn this process
             # into a proxy for the remote process.
             read_set = [fobj, sys.stdin]
+
             while True:
                 to_read, _, _ = select.select(read_set, [], [])
 
@@ -88,7 +92,8 @@ class Control(object):
                     obj = json.loads(fobj.readline())
 
                     if obj is None:
-                        sys.stdout.close()
+                        # Server is done.
+                        raise IOError()
 
                     elif isinstance(obj, str) or isinstance(obj, unicode):
                         data = binascii.a2b_base64(obj)
@@ -96,7 +101,8 @@ class Control(object):
                         sys.stdout.flush()
 
                     elif isinstance(obj, int):
-                        sys.exit(obj)
+                        # Remember our exitcode.
+                        exitcode = obj
 
                 if sys.stdin in to_read:
 
@@ -111,9 +117,8 @@ class Control(object):
                         read_set.remove(sys.stdin)
 
         except IOError:
-            # We don't expect the socket to be closed.
-            # This is not a normal exit scenario (anymore).
-            sys.exit(1)
+            # Socket was closed.
+            sys.exit(exitcode)
 
         finally:
             # Restore all of our original terminal attributes.

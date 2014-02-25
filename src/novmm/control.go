@@ -130,26 +130,15 @@ func handleConn(
             }
         }()
 
-        select {
-        case <-inputs:
-            // Keep going.
-            break
+        // Wait till exit.
+        status := <-exitcode
+        encoder.Encode(status)
 
-        case <-outputs:
-            // Sever the connection.
-            return
-        }
+        // Wait till EOF.
+        <-inputs
 
-        select {
-        case status := <-exitcode:
-            // Encode the exit code.
-            encoder.Encode(status)
-            break
-
-        case <-outputs:
-            // Sever the connection.
-            return
-        }
+        // Send a notice and close the socket.
+        encoder.Encode(nil)
 
     } else if header == "NOVM RPC" {
 
