@@ -49,11 +49,14 @@ def prettyprint(value, output):
 
         def format_entry(k, v):
             if isinstance(v, types.FloatType) and k == "timestamp":
+                # Hack to print the time.
                 return time.ctime(v)
             elif isinstance(v, types.ListType):
                 return ",".join([str(x) for x in v])
-            else:
+            elif v:
                 return str(v)
+            else:
+                return ""
 
         # Compute column widths.
         max_width = {}
