@@ -22,7 +22,13 @@ def prettyprint(value, output):
             keys = range(len(value))
             values = value
         else:
-            items = value.items()
+            def try_int(k):
+                try:
+                    return int(k)
+                except ValueError:
+                    return k
+
+            items = sorted([(try_int(k), v) for (k,v) in value.items()])
             keys = [x[0] for x in items]
             values = [x[1] for x in items]
 
