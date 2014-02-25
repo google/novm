@@ -1,6 +1,7 @@
 """
 Command-line entry point.
 """
+import os
 import sys
 import inspect
 import argparse
@@ -74,21 +75,35 @@ def main(args):
             epilog=fn.__doc__)
 
         for (option, spec) in defaults:
+            env_value = os.environ.get("NOVM_%s" % option.upper())
+
             if isinstance(spec, BoolOpt):
                 opt_action = "store_true"
-                opt_default = False
+                if env_value is not None:
+                    opt_default = (env_value.lower() == "true")
+                else:
+                    opt_default = False
                 opt_type = None
             elif isinstance(spec, ListOpt):
                 opt_action = "append"
-                opt_default = []
+                if env_value is not None:
+                    opt_default = env_value.split(",")
+                else:
+                    opt_default = []
                 opt_type = None
             elif isinstance(spec, StrOpt):
                 opt_action = "store"
-                opt_default = None
+                if env_value is not None:
+                    opt_default = env_value
+                else:
+                    opt_default = None
                 opt_type = None
             elif isinstance(spec, IntOpt):
                 opt_action = "store"
-                opt_default = None
+                if env_value is not None:
+                    opt_default = int(env_value)
+                else:
+                    opt_default = None
                 opt_type = int
             else:
                 # Shouldn't happen.
