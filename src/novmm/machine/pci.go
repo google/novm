@@ -381,10 +381,9 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
     // No capabilities to install.
     if len(pcidevice.Capabilities) == 0 {
         pcidevice.Config[0x6] &= ^byte(0x10)
+        pcidevice.Config[0x34] = 0x00
         pcidevice.Debug("pci disabled capabilities")
         return
-    } else {
-        pcidevice.Debug("pci enabled capabilities")
     }
 
     // Ensure that we have capabilities present.
@@ -412,6 +411,7 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // Save the first item.
     pcidevice.Config[0x34] = last_pointer
+    pcidevice.Debug("pci enabled capabilities")
 }
 
 func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
