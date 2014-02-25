@@ -3,6 +3,8 @@ package rpc
 import (
     "bytes"
     "os"
+    "path"
+    "strings"
     "sync"
     "syscall"
     "time"
@@ -38,6 +40,39 @@ type StartResult struct {
 func (server *Server) Start(
     command *StartCommand,
     result *StartResult) error {
+
+    // We need at least a command.
+    if len(command.Command) == 0 {
+        return syscall.EINVAL
+    }
+
+    // Lookup our binary name.
+    var binary string
+    _, err := os.Stat(command.Command[0])
+    if err == nil {
+        // Absolute path is okay.
+        binary = command.Command[0]
+    } else {
+        // Check our environment.
+        for _, keyval := range command.Environment {
+            if strings.HasPrefix(keyval, "PATH=") && len(keyval) > 5 {
+                dirpaths := strings.Split(keyval[5:], ":")
+                for _, dirpath := range dirpaths {
+                    testpath := path.Join(dirpath, command.Command[0])
+                    _, err = os.Stat(testpath)
+                    if err == nil {
+                        binary = testpath
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    // Did we find a binary?
+    if binary == "" {
+        return syscall.ENOENT
+    }
 
     // Open a master terminal Fd.
     fd, err := C.posix_openpt(syscall.O_RDWR | syscall.O_NOCTTY)
@@ -98,7 +133,7 @@ func (server *Server) Start(
         },
     }
     proc, err := os.StartProcess(
-        command.Command[0],
+        binary,
         command.Command,
         proc_attr)
 
