@@ -53,7 +53,7 @@ def prettyprint(value, output):
                 return time.ctime(v)
             elif isinstance(v, types.ListType):
                 return ",".join([str(x) for x in v])
-            elif v:
+            elif v is not None:
                 return str(v)
             else:
                 return ""
