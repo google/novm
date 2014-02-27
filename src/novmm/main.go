@@ -109,7 +109,7 @@ func main() {
     if *control_fd == -1 {
         log.Fatal(InvalidControlSocket)
     }
-    control := NewControl(*control_fd, vm, tracer, proxy)
+    control := NewControl(*control_fd, model, vm, tracer, proxy)
     go control.serve()
 
     // Wait until we get a signal,

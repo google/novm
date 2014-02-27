@@ -18,6 +18,9 @@ type Control struct {
     // The bound control fd.
     control_fd int
 
+    // Our device model.
+    model *machine.Model
+
     // Our underlying Vm object.
     vm  *platform.Vm
 
@@ -258,6 +261,7 @@ func (control *Control) serve() {
 
 func NewControl(
     control_fd int,
+    model *machine.Model,
     vm *platform.Vm,
     tracer *loader.Tracer,
     proxy machine.Proxy) *Control {
