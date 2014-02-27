@@ -9,6 +9,7 @@ import binascii
 import sys
 import termios
 import tty
+import uuid
 
 from . import utils
 
@@ -43,6 +44,37 @@ class Control(object):
 
     def fd(self):
         return self._sock.fileno()
+
+    def rpc(self, name, **kwargs):
+
+        # Open the socket.
+        fobj = self._sock.makefile(bufsize=0)
+        fobj.write("NOVM RPC\n")
+
+        # Write our command.
+        # NOTE: This is currently not thread safe.
+        # At some point, this class could implement
+        # some multiplexing or safety for multiple
+        # callers, but this isn't necessary until
+        # there's a user other than the CLI.
+        rpc_uuid = str(uuid.uuid4())
+        rpc_cmd = {
+            "method": "Control.%s" % name.title(),
+            "params": [kwargs], 
+            "id": rpc_uuid,
+        }
+        json.dump(rpc_cmd, fobj)
+        fobj.write("\n")
+        fobj.flush()
+
+        # Get our result.
+        obj = json.loads(fobj.readline())
+        if obj["id"] != rpc_uuid:
+            raise Exception(obj)
+        if obj.get("error"):
+            raise Exception(obj.get("error"))
+
+        return obj.get("result")
 
     def run(self, command, env=None, cwd=None):
         if env is None:

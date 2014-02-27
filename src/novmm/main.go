@@ -52,6 +52,13 @@ func main() {
         log.Fatal(NoVcpus)
     }
 
+    // Enable stepping if requested.
+    if *step {
+        for _, vcpu := range vcpus {
+            vcpu.SetStepping(true)
+        }
+    }
+
     // Load all devices.
     proxy, err := model.LoadDevices(vm, []byte(*device_data))
     if err != nil {
@@ -90,7 +97,7 @@ func main() {
     for _, vcpu := range vcpus {
         go func(vcpu *platform.Vcpu) {
             defer vcpu.Dispose()
-            err := Loop(vcpu, model, *step, tracer)
+            err := Loop(vcpu, model, tracer)
             if err != nil {
                 vcpu.Dump()
             }
@@ -102,7 +109,8 @@ func main() {
     if *control_fd == -1 {
         log.Fatal(InvalidControlSocket)
     }
-    go serveControl(*control_fd, vm, proxy)
+    control := NewControl(*control_fd, vm, tracer, proxy)
+    go control.serve()
 
     // Wait until we get a signal,
     // or all the VCPUs are dead.

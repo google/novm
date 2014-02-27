@@ -10,17 +10,16 @@ import (
 func Loop(
     vcpu *platform.Vcpu,
     model *machine.Model,
-    step bool,
     tracer *loader.Tracer) error {
 
     log.Print("Vcpu running...")
 
     for {
         // Enter the guest.
-        err := vcpu.Run(step)
+        err := vcpu.Run()
 
         // Trace if requested.
-        trace_err := tracer.Trace(vcpu, step)
+        trace_err := tracer.Trace(vcpu, vcpu.IsStepping())
         if trace_err != nil {
             return trace_err
         }

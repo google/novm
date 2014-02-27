@@ -331,6 +331,43 @@ class NovmManager(object):
                 exc_info = sys.exc_info()
                 raise exc_info[0], exc_info[1], exc_info[2]
 
+    def control(self,
+            id=cli.StrOpt("The instance id."),
+            name=cli.StrOpt("The instance name."),
+            *command):
+
+        """ Execute a control command. """
+        if len(command) == 0:
+            raise Exception("Need to provide a command.")
+
+        split_args = [arg.split("=", 1) for arg in command[1:]]
+        if [arg for arg in split_args if len(arg) != 2]:
+            raise Exception("Arguments should be key=value.")
+        kwargs = dict(split_args)
+
+        norm_kwargs = dict()
+        for (k, v) in kwargs.items():
+            try:
+                # Is it an int?
+                v = int(v)
+            except ValueError:
+                pass
+
+            # How about a bool?
+            if v.lower() == "false":
+                v = False
+            elif v.lower() == "true":
+                v = True
+
+            norm_kwargs[k] = v
+
+        obj_id = self._instances.find(obj_id=id, name=name)
+
+        ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
+        ctrl = control.Control(ctrl_path, bind=False)
+
+        return ctrl.rpc(command[0], **norm_kwargs)
+
     def run(self,
             id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name."),

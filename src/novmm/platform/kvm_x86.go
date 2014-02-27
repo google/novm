@@ -117,7 +117,7 @@ func (vm *Vm) IOApic() Paddr {
     return Paddr(0xfec00000)
 }
 
-func (vcpu *Vcpu) Run(step bool) error {
+func (vcpu *Vcpu) Run() error {
     // Make sure our registers are flushed.
     err := vcpu.flushRegs()
     if err != nil {
@@ -126,15 +126,6 @@ func (vcpu *Vcpu) Run(step bool) error {
     err = vcpu.flushSRegs()
     if err != nil {
         return err
-    }
-
-    // Set single step if requested.
-    if step {
-        err = vcpu.setSingleStep(true)
-        if err != nil {
-            return err
-        }
-        defer vcpu.setSingleStep(false)
     }
 
     // Execute our run ioctl.

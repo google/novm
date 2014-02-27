@@ -162,6 +162,9 @@ type Vm struct {
     // At the moment, we just expose the full
     // host flags to the guest.
     cpuid []byte
+
+    // Our vcpus.
+    vcpus []*Vcpu
 }
 
 type Vcpu struct {
@@ -187,6 +190,9 @@ type Vcpu struct {
     sregs_cached bool
     regs_dirty   bool
     sregs_dirty  bool
+
+    // Is this stepping?
+    is_stepping bool
 }
 
 // The size of the mmap structure.
@@ -293,7 +299,10 @@ func NewVm() (*Vm, error) {
 
     // Prepare our VM object.
     log.Print("kvm: VM created.")
-    vm := &Vm{fd: int(vmfd)}
+    vm := &Vm{
+        fd:    int(vmfd),
+        vcpus: make([]*Vcpu, 0, 0),
+    }
 
     // Try to create an IRQ chip.
     err = vm.createIrqChip()
@@ -377,15 +386,22 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     }
     kvm_run := (*C.struct_kvm_run)(unsafe.Pointer(&mmap[0]))
 
-    // Bump our next vcpu id.
-    vm.next_id += 1
-
-    // Return our VCPU object.
-    return &Vcpu{
+    // Add our Vcpu.
+    vcpu := &Vcpu{
         fd:      int(vcpufd),
         vcpu_id: vcpu_id,
         mmap:    mmap,
-        kvm:     kvm_run}, nil
+        kvm:     kvm_run,
+    }
+    vm.vcpus = append(vm.vcpus, vcpu)
+    vm.next_id += 1
+
+    // Return our VCPU object.
+    return vcpu, nil
+}
+
+func (vm *Vm) GetVcpus() []*Vcpu {
+    return vm.vcpus
 }
 
 func (vm *Vm) createIrqChip() error {
@@ -593,4 +609,21 @@ func (vcpu *Vcpu) Translate(
     usermode := translation.valid != C.__u8(0)
 
     return paddr, valid, writeable, usermode, nil
+}
+
+func (vcpu *Vcpu) IsStepping() bool {
+    return vcpu.is_stepping
+}
+
+func (vcpu *Vcpu) SetStepping(step bool) error {
+    var err error
+    if step {
+        err = vcpu.setSingleStep(true)
+    } else {
+        err = vcpu.setSingleStep(false)
+    }
+    if err == nil {
+        vcpu.is_stepping = step
+    }
+    return err
 }

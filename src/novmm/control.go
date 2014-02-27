@@ -1,36 +1,112 @@
 package main
 
 import (
-    "bufio"
     "encoding/json"
     "net/rpc"
     "net/rpc/jsonrpc"
     noguest "noguest/rpc"
+    "novmm/loader"
     "novmm/machine"
     "novmm/platform"
     "os"
-    "strings"
     "sync"
     "syscall"
 )
 
-func handleConn(
+type Control struct {
+
+    // The bound control fd.
+    control_fd int
+
+    // Our underlying Vm object.
+    vm  *platform.Vm
+
+    // Our tracer.
+    tracer *loader.Tracer
+
+    // Our proxy to the in-guest agent.
+    proxy machine.Proxy
+
+    // Our bound client (to the in-guest agent).
+    // NOTE: We have this setup as a lazy
+    // function because the guest may take
+    // some small amount of time before its
+    // actually ready to process RPC requests.
+    // But we don't want this to interfere
+    // with our ability to process our host
+    // side RPC requests.
+    client_err   error
+    client_once  sync.Once
+    client_codec rpc.ClientCodec
+    client       *rpc.Client
+}
+
+type VmSettings struct {
+}
+
+type TraceSettings struct {
+    // Tracing?
+    Enable bool `json:"enable"`
+}
+
+type VcpuSettings struct {
+    // Which vcpu?
+    Id  int `json:"id"`
+
+    // Single stepping?
+    Step bool `json:"step"`
+}
+
+func (control *Control) Vm(settings *VmSettings, ok *bool) error {
+    *ok = true
+    return nil
+}
+
+func (control *Control) Trace(settings *TraceSettings, ok *bool) error {
+    if settings.Enable {
+        control.tracer.Enable()
+    } else {
+        control.tracer.Disable()
+    }
+    *ok = true
+    return nil
+}
+
+func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
+    // A valid vcpu?
+    vcpus := control.vm.GetVcpus()
+    if settings.Id >= len(vcpus) {
+        *ok = false
+        return syscall.EINVAL
+    }
+    vcpu := vcpus[settings.Id]
+    err := vcpu.SetStepping(settings.Step)
+    *ok = (err == nil)
+    return err
+}
+
+func (control *Control) handle(
     conn_fd int,
-    server *rpc.Server,
-    ready func() (*rpc.Client, error)) {
+    server *rpc.Server) {
 
     control_file := os.NewFile(uintptr(conn_fd), "control")
     defer control_file.Close()
 
     // Read single header.
-    reader := bufio.NewReader(control_file)
-    header, err := reader.ReadString('\n')
-    if err != nil {
-        control_file.Write([]byte(err.Error()))
+    // Our header is exactly 9 characters, and we
+    // expect the last character to be a newline.
+    // This is a simple plaintext protocol.
+    header_buf := make([]byte, 9, 9)
+    n, err := control_file.Read(header_buf)
+    if n != 9 || header_buf[8] != '\n' {
+        if err != nil {
+            control_file.Write([]byte(err.Error()))
+        } else {
+            control_file.Write([]byte("invalid header"))
+        }
         return
     }
-
-    header = strings.TrimSpace(header)
+    header := string(header_buf)
 
     // We read a special header before diving into RPC
     // mode. This is because for the novmrun case, we turn
@@ -38,9 +114,9 @@ func handleConn(
     // These are simply JSON serialized versions of the
     // events for the guest RPC interface.
 
-    if header == "NOVM RUN" {
+    if header == "NOVM RUN\n" {
 
-        decoder := json.NewDecoder(reader)
+        decoder := json.NewDecoder(control_file)
         encoder := json.NewEncoder(control_file)
 
         var start noguest.StartCommand
@@ -52,7 +128,7 @@ func handleConn(
         }
 
         // Grab our client.
-        client, err := ready()
+        client, err := control.ready()
         if err != nil {
             encoder.Encode(err.Error())
             return
@@ -140,7 +216,7 @@ func handleConn(
         // Send a notice and close the socket.
         encoder.Encode(nil)
 
-    } else if header == "NOVM RPC" {
+    } else if header == "NOVM RPC\n" {
 
         // Run as JSON RPC connection.
         codec := jsonrpc.NewServerCodec(control_file)
@@ -148,49 +224,50 @@ func handleConn(
     }
 }
 
-func serveControl(
-    control_fd int,
-    vm *platform.Vm,
-    proxy machine.Proxy) {
+func (control *Control) barrier() {
+    buffer := make([]byte, 1, 1)
+    n, err := control.proxy.Read(buffer)
+    if n == 1 && err == nil {
+        control.client_err = nil
+        control.client_codec = jsonrpc.NewClientCodec(control.proxy)
+        control.client = rpc.NewClientWithCodec(control.client_codec)
+    } else if err != nil {
+        control.client_err = err
+    }
+}
+
+func (control *Control) ready() (*rpc.Client, error) {
+    control.client_once.Do(control.barrier)
+    return control.client, control.client_err
+}
+
+func (control *Control) serve() {
 
     // Bind our rpc server.
     server := rpc.NewServer()
+    server.Register(control)
 
-    // Bind our client.
-    // NOTE: We have this setup as a lazy
-    // function because the guest may take
-    // some small amount of time before its
-    // actually ready to process RPC requests.
-    // But we don't want this to interfere
-    // with our ability to process our host
-    // side RPC requests.
-
-    var client_err error
-    var client_once sync.Once
-    var client_codec rpc.ClientCodec
-    var client *rpc.Client
-
-    barrier := func() {
-        buffer := make([]byte, 1, 1)
-        n, err := proxy.Read(buffer)
-        if n == 1 && err == nil {
-            client_err = nil
-            client_codec = jsonrpc.NewClientCodec(proxy)
-            client = rpc.NewClientWithCodec(client_codec)
-        } else if err != nil {
-            client_err = err
-        }
-    }
-    ready := func() (*rpc.Client, error) {
-        client_once.Do(barrier)
-        return client, client_err
-    }
-
-    // Accept clients.
     for {
-        nfd, _, err := syscall.Accept(control_fd)
+        // Accept clients.
+        nfd, _, err := syscall.Accept(control.control_fd)
         if err == nil {
-            go handleConn(nfd, server, ready)
+            go control.handle(nfd, server)
         }
     }
+}
+
+func NewControl(
+    control_fd int,
+    vm *platform.Vm,
+    tracer *loader.Tracer,
+    proxy machine.Proxy) *Control {
+
+    // Create our control object.
+    control := new(Control)
+    control.control_fd = control_fd
+    control.vm = vm
+    control.tracer = tracer
+    control.proxy = proxy
+
+    return control
 }
