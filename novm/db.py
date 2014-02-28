@@ -55,34 +55,22 @@ class Nodb(object):
 
     def add(self, obj_id, obj):
         obj["timestamp"] = time.time()
-        try:
-            with open(self.file("%s.json" % obj_id), 'w') as outf:
-                json.dump(
-                    obj, outf,
-                    check_circular=True,
-                    indent=True)
-        except (IOError, OSError):
-            # Already exists.
-            raise KeyError(obj_id)
+        with open(self.file("%s.json" % obj_id), 'w') as outf:
+            json.dump(
+                obj, outf,
+                check_circular=True,
+                indent=True)
 
     def get(self, obj_id=None, **kwargs):
-        try:
-            obj_id = self.find(obj_id=obj_id, **kwargs)
-            with open(self.file("%s.json" % obj_id), 'r') as inf:
-                return json.load(inf)
-        except (IOError, OSError):
-            # Does not exist.
-            raise KeyError(obj_id)
+        obj_id = self.find(obj_id=obj_id, **kwargs)
+        with open(self.file("%s.json" % obj_id), 'r') as inf:
+            return json.load(inf)
 
     def remove(self, obj_id=None, **kwargs):
-        try:
-            obj_id = self.find(obj_id=obj_id, **kwargs)
-            os.remove(self.file("%s.json" % obj_id))
-            if os.path.exists(self.file(obj_id)):
-                shutil.rmtree(self.file(obj_id))
-        except OSError:
-            # Does not exist.
-            raise KeyError(obj_id)
+        obj_id = self.find(obj_id=obj_id, **kwargs)
+        os.remove(self.file("%s.json" % obj_id))
+        if os.path.exists(self.file(obj_id)):
+            shutil.rmtree(self.file(obj_id))
 
     def find(self, obj_id=None, **kwargs):
         if obj_id is not None:
