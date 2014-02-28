@@ -481,7 +481,15 @@ class NovmManager(object):
 
     def kernels(self):
         """ List available kernels. """
-        return self._kernels.show()
+        kernels = self._kernels.show()
+        for (obj_id, data) in kernels.items():
+            try:
+                # Add the release.
+                release = open(self._kernels.file(obj_id, "release")).read().strip()
+                data["release"] = release
+            except IOError:
+                continue
+        return kernels
 
     def getkernel(self,
             url=cli.StrOpt("The kernel URL (e.g. file: or http:)."),
