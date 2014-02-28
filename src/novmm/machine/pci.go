@@ -37,14 +37,21 @@ const (
 //
 // Configuration offsets.
 //
-// Accesses via the bus are little-endian, so
-// we need to do a little bit of trickery inside
-// our Read() and Write() methods below.
-//
 const (
-    PciConfigOffsetCommand      = 0x4
-    PciConfigOffsetStatus       = 0x6
-    PciConfigOffsetCapabilities = 0x34
+    PciConfigOffsetVendorId          = 0x0
+    PciConfigOffsetDeviceId          = 0x2
+    PciConfigOffsetCommand           = 0x4
+    PciConfigOffsetStatus            = 0x6
+    PciConfigOffsetRevision          = 0x8
+    PciConfigOffsetProgIf            = 0x9
+    PciConfigOffsetSubclassId        = 0xa
+    PciConfigOffsetClassId           = 0xb
+    PciConfigOffsetHeaderType        = 0xe
+    PciConfigOffsetSubsystemVendorId = 0x2c
+    PciConfigOffsetSubsystemDeviceId = 0x2e
+    PciConfigOffsetCapabilities      = 0x34
+    PciConfigOffsetInterruptLine     = 0x3c
+    PciConfigOffsetInterruptPin      = 0x3d
 )
 
 //
@@ -280,18 +287,17 @@ func NewPciDevice(
     device.Init(info)
 
     // Set our configuration space.
-    device.Config.Set16(0x0, uint16(vendor_id))
-    device.Config.Set16(0x2, uint16(device_id))
-    device.Config.Set16(0x4, 0x143)
-    device.Config.Set16(0x6, 0x0)
-    device.Config.Set8(0x8, uint8(revision))
-    device.Config.Set8(0x9, uint8(0)) // Prog IF.
-    device.Config.Set8(0xa, uint8(0)) // Subclass.
-    device.Config.Set8(0xb, uint8(class))
-    device.Config.Set8(0xe, 0x0) // Header type.
-    device.Config.Set8(0xf, 0x0)
-    device.Config.Set16(0x2c, subsystem_vendor)
-    device.Config.Set16(0x2e, subsystem_id)
+    device.Config.Set16(PciConfigOffsetVendorId, uint16(vendor_id))
+    device.Config.Set16(PciConfigOffsetDeviceId, uint16(device_id))
+    device.Config.Set16(PciConfigOffsetCommand, 0x143)
+    device.Config.Set16(PciConfigOffsetStatus, 0x0)
+    device.Config.Set8(PciConfigOffsetRevision, uint8(revision))
+    device.Config.Set8(PciConfigOffsetProgIf, uint8(0))
+    device.Config.Set8(PciConfigOffsetSubclassId, uint8(0))
+    device.Config.Set8(PciConfigOffsetClassId, uint8(class))
+    device.Config.Set8(PciConfigOffsetHeaderType, 0x0)
+    device.Config.Set16(PciConfigOffsetSubsystemVendorId, subsystem_vendor)
+    device.Config.Set16(PciConfigOffsetSubsystemDeviceId, subsystem_id)
 
     // A default device has 6 bars.
     // (This is different only for bridges, etc.)
@@ -447,8 +453,8 @@ func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
     // This is gross, but we hard-coded the line to 1
     // unless you're using MSI. This really should be
     // fixed (if we actually plan on using PCI devices).
-    pcidevice.Config.Set8(0x3c, 1)
-    pcidevice.Config.Set8(0x3d, 0)
+    pcidevice.Config.Set8(PciConfigOffsetInterruptLine, 1)
+    pcidevice.Config.Set8(PciConfigOffsetInterruptPin, 0)
     pcidevice.std_interrupt = func() error {
         vm.Interrupt(platform.Irq(1), true)
         vm.Interrupt(platform.Irq(1), false)
