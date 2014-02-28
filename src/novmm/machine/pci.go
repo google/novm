@@ -35,6 +35,19 @@ const (
 )
 
 //
+// Configuration offsets.
+//
+// Accesses via the bus are little-endian, so
+// we need to do a little bit of trickery inside
+// our Read() and Write() methods below.
+//
+const (
+    PciConfigOffsetCommand      = 0x4
+    PciConfigOffsetStatus       = 0x6
+    PciConfigOffsetCapabilities = 0x34
+)
+
+//
 // Our barsizes determine what we report
 // for the size of each bar to the system.
 //
@@ -174,36 +187,32 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
         return math.MaxUint64, nil
     }
 
+    offset += reg.PciBus.Offset & 0xfc
+
     // Is this a capability?
-    if reg.PciBus.Offset >= 0x40 {
+    for id, capability := range reg.PciBus.last.Capabilities {
 
-        reg.PciBus.last.Debug(
-            "pci capabilities read @ %x",
-            reg.PciBus.Offset)
+        if offset >= capability.Offset &&
+            offset < capability.Offset+capability.Size {
 
-        for id, capability := range reg.PciBus.last.Capabilities {
-            if reg.PciBus.Offset >= capability.Offset &&
-                reg.PciBus.Offset < capability.Offset+capability.Size {
+            value, err := capability.Read(offset-capability.Offset, size)
+            reg.PciBus.last.Debug(
+                "pci capabilities read [%x] %x @ %x",
+                id,
+                value,
+                offset-capability.Offset)
 
-                value, err := capability.Read(reg.PciBus.Offset-capability.Offset, size)
-                reg.PciBus.last.Debug(
-                    "pci capabilities read [%x] %x @ %x",
-                    id,
-                    value,
-                    reg.PciBus.Offset-capability.Offset)
-
-                return value, err
-            }
+            return value, err
         }
     }
 
-    value, err := reg.PciBus.last.Config.Read(reg.PciBus.Offset, size)
+    value, err := reg.PciBus.last.Config.Read(offset, size)
 
     // Debugging?
     reg.PciBus.last.Debug(
         "pci config read %x @ %x [size: %d]",
         value,
-        reg.PciBus.Offset,
+        offset,
         size)
 
     return value, err
@@ -216,40 +225,36 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
         return nil
     }
 
+    offset += reg.PciBus.Offset & 0xfc
+
+    // Is this a capability?
+    for id, capability := range reg.PciBus.last.Capabilities {
+
+        if offset >= capability.Offset &&
+            offset < capability.Offset+capability.Size {
+
+            reg.PciBus.last.Debug(
+                "pci capabilities write [%x] %x @ %x",
+                id,
+                value,
+                offset-capability.Offset)
+
+            return capability.Write(offset-capability.Offset, size, value)
+        }
+    }
+
     // Debugging?
     reg.PciBus.last.Debug(
         "pci config write %x @ %x [size: %d]",
         value,
-        reg.PciBus.Offset,
+        offset,
         size)
 
-    // Is this a capability?
-    if reg.PciBus.Offset >= 0x40 {
-
-        reg.PciBus.last.Debug(
-            "pci capabilities write %x @ %x",
-            value,
-            reg.PciBus.Offset)
-
-        for id, capability := range reg.PciBus.last.Capabilities {
-            if reg.PciBus.Offset >= capability.Offset &&
-                reg.PciBus.Offset < capability.Offset+capability.Size {
-
-                reg.PciBus.last.Debug(
-                    "pci capabilities write [%x] %x @ %x",
-                    id,
-                    value,
-                    reg.PciBus.Offset-capability.Offset)
-                return capability.Write(reg.PciBus.Offset-capability.Offset, size, value)
-            }
-        }
-    }
-
-    err := reg.PciBus.last.Config.Write(reg.PciBus.Offset, size, value)
+    err := reg.PciBus.last.Config.Write(offset, size, value)
 
     // Rebuild our BARs?
-    if reg.PciBus.Offset >= 0x10 &&
-        reg.PciBus.Offset < uint64(0x10+4*reg.PciBus.last.PciBarCount) {
+    if offset >= 0x10 &&
+        offset < uint64(0x10+4*reg.PciBus.last.PciBarCount) {
         reg.PciBus.last.RebuildBars()
         return reg.PciBus.flush()
     }
@@ -283,7 +288,8 @@ func NewPciDevice(
     device.Config.Set8(0x9, uint8(0)) // Prog IF.
     device.Config.Set8(0xa, uint8(0)) // Subclass.
     device.Config.Set8(0xb, uint8(class))
-    device.Config.Set8(0xe, 0x0) // Type.
+    device.Config.Set8(0xe, 0x0) // Header type.
+    device.Config.Set8(0xf, 0x0)
     device.Config.Set16(0x2c, subsystem_vendor)
     device.Config.Set16(0x2e, subsystem_id)
 
@@ -382,7 +388,7 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // Already done, we don't mess with it.
     if len(pcidevice.Capabilities) > 0 &&
-        pcidevice.Config[0x6]&0x10 == 0x10 {
+        pcidevice.Config[PciConfigOffsetStatus]&0x10 == 0x10 {
         return
     }
 
@@ -392,8 +398,10 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
     }
 
     // Construct our pointers.
+    // The end of our standard configuration is 0x40,
+    // so we start our configuration pointers there.
     last_pointer := byte(0x0)
-    consumed := 0x40 // End of regular configuration.
+    consumed := 0x40
 
     for id, capability := range pcidevice.Capabilities {
 
@@ -413,8 +421,8 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // Save the first item,
     // and set out capabilities status bit.
-    pcidevice.Config[0x34] = last_pointer
-    pcidevice.Config[0x6] |= 0x10
+    pcidevice.Config[PciConfigOffsetCapabilities] = last_pointer
+    pcidevice.Config[PciConfigOffsetStatus] |= 0x10
 }
 
 func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
