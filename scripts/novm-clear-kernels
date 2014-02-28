@@ -4,5 +4,5 @@ set -e
 
 DIRNAME=$(dirname $0)
 for kernel in $($DIRNAME/novm --plain kernels); do
-    $DIRNAME/novm rmkernel --kernel_id $kernel
+    $DIRNAME/novm rmkernel --id $kernel
 done
