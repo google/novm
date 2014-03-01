@@ -9,6 +9,7 @@ import (
     "novmm/machine"
     "novmm/platform"
     "os"
+    "regexp"
     "sync"
     "syscall"
 )
@@ -47,6 +48,14 @@ type Control struct {
 type VmSettings struct {
 }
 
+type DeviceSettings struct {
+    // Name.
+    Name string `json:"name"`
+
+    // Debug?
+    Debug bool `json:"debug"`
+}
+
 type TraceSettings struct {
     // Tracing?
     Enable bool `json:"enable"`
@@ -61,6 +70,23 @@ type VcpuSettings struct {
 }
 
 func (control *Control) Vm(settings *VmSettings, ok *bool) error {
+    *ok = true
+    return nil
+}
+
+func (control *Control) Device(settings *DeviceSettings, ok *bool) error {
+
+    rp, err := regexp.Compile(settings.Name)
+    if err != nil {
+        return err
+    }
+
+    for _, device := range control.model.Devices() {
+        if rp.MatchString(device.Name()) {
+            device.SetDebugging(settings.Debug)
+        }
+    }
+
     *ok = true
     return nil
 }

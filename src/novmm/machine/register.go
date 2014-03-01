@@ -19,13 +19,13 @@ func (register *Register) Read(offset uint64, size uint) (uint64, error) {
 
     switch size {
     case 1:
-        mask = 0x000000ff
+        mask = 0x00000000000000ff
     case 2:
-        mask = 0x0000ffff
-    case 3:
-        mask = 0x00ffffff
+        mask = 0x000000000000ffff
     case 4:
-        mask = 0xffffffff
+        mask = 0x00000000ffffffff
+    case 8:
+        mask = 0xffffffffffffffff
     }
 
     value := uint64(math.MaxUint64)
@@ -42,6 +42,18 @@ func (register *Register) Read(offset uint64, size uint) (uint64, error) {
     case 3:
         value = (register.Value >> 24) & mask
         mask = mask << 24
+    case 4:
+        value = (register.Value >> 32) & mask
+        mask = mask << 32
+    case 5:
+        value = (register.Value >> 40) & mask
+        mask = mask << 40
+    case 6:
+        value = (register.Value >> 48) & mask
+        mask = mask << 48
+    case 7:
+        value = (register.Value >> 56) & mask
+        mask = mask << 56
     }
 
     register.Value = register.Value & ^(mask & register.readclr)
@@ -53,13 +65,13 @@ func (register *Register) Write(offset uint64, size uint, value uint64) error {
 
     switch size {
     case 1:
-        mask = 0x000000ff & ^register.readonly
+        mask = 0x00000000000000ff & ^register.readonly
     case 2:
-        mask = 0x0000ffff & ^register.readonly
-    case 3:
-        mask = 0x00ffffff & ^register.readonly
+        mask = 0x000000000000ffff & ^register.readonly
     case 4:
-        mask = 0xffffffff & ^register.readonly
+        mask = 0x00000000ffffffff & ^register.readonly
+    case 8:
+        mask = 0xffffffffffffffff & ^register.readonly
     }
 
     value = value & mask
@@ -74,6 +86,18 @@ func (register *Register) Write(offset uint64, size uint, value uint64) error {
     case 3:
         mask = mask << 24
         value = value << 24
+    case 4:
+        mask = mask << 32
+        value = value << 32
+    case 5:
+        mask = mask << 40
+        value = value << 40
+    case 6:
+        mask = mask << 48
+        value = value << 48
+    case 7:
+        mask = mask << 56
+        value = value << 56
     }
 
     register.Value = (register.Value & ^mask) | (value & mask)

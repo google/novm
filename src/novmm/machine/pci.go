@@ -17,6 +17,8 @@ type PciVendorId uint16
 type PciDeviceId uint16
 type PciClass uint8
 type PciRevision uint8
+type PciSubsystemVendorId PciVendorId
+type PciSubsystemDeviceId PciDeviceId
 
 const (
     PciClassStorage        PciClass = 0x1
@@ -194,7 +196,7 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
         return math.MaxUint64, nil
     }
 
-    offset += reg.PciBus.Offset & 0xfc
+    offset += (reg.PciBus.Offset & 0xfc)
 
     // Is this a capability?
     for id, capability := range reg.PciBus.last.Capabilities {
@@ -204,10 +206,11 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
 
             value, err := capability.Read(offset-capability.Offset, size)
             reg.PciBus.last.Debug(
-                "pci capabilities read [%x] %x @ %x",
+                "pci capabilities read [%x] %x @ %x [size: %d]",
                 id,
                 value,
-                offset-capability.Offset)
+                offset-capability.Offset,
+                size)
 
             return value, err
         }
@@ -232,7 +235,7 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
         return nil
     }
 
-    offset += reg.PciBus.Offset & 0xfc
+    offset += (reg.PciBus.Offset & 0xfc)
 
     // Is this a capability?
     for id, capability := range reg.PciBus.last.Capabilities {
@@ -241,10 +244,11 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
             offset < capability.Offset+capability.Size {
 
             reg.PciBus.last.Debug(
-                "pci capabilities write [%x] %x @ %x",
+                "pci capabilities write [%x] %x @ %x [size: %d]",
                 id,
                 value,
-                offset-capability.Offset)
+                offset-capability.Offset,
+                size)
 
             return capability.Write(offset-capability.Offset, size, value)
         }
@@ -275,8 +279,8 @@ func NewPciDevice(
     device_id PciDeviceId,
     class PciClass,
     revision PciRevision,
-    subsystem_id uint16,
-    subsystem_vendor uint16) (*PciDevice, error) {
+    subsystem_vendor_id PciSubsystemVendorId,
+    subsystem_device_id PciSubsystemDeviceId) (*PciDevice, error) {
 
     // Create the pci device.
     device := new(PciDevice)
@@ -296,8 +300,8 @@ func NewPciDevice(
     device.Config.Set8(PciConfigOffsetSubclassId, uint8(0))
     device.Config.Set8(PciConfigOffsetClassId, uint8(class))
     device.Config.Set8(PciConfigOffsetHeaderType, 0x0)
-    device.Config.Set16(PciConfigOffsetSubsystemVendorId, subsystem_vendor)
-    device.Config.Set16(PciConfigOffsetSubsystemDeviceId, subsystem_id)
+    device.Config.Set16(PciConfigOffsetSubsystemVendorId, uint16(subsystem_vendor_id))
+    device.Config.Set16(PciConfigOffsetSubsystemDeviceId, uint16(subsystem_device_id))
 
     // A default device has 6 bars.
     // (This is different only for bridges, etc.)
@@ -454,7 +458,7 @@ func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
     // unless you're using MSI. This really should be
     // fixed (if we actually plan on using PCI devices).
     pcidevice.Config.Set8(PciConfigOffsetInterruptLine, 1)
-    pcidevice.Config.Set8(PciConfigOffsetInterruptPin, 0)
+    pcidevice.Config.Set8(PciConfigOffsetInterruptPin, 1)
     pcidevice.std_interrupt = func() error {
         vm.Interrupt(platform.Irq(1), true)
         vm.Interrupt(platform.Irq(1), false)

@@ -115,7 +115,6 @@ func (io *IoHandler) Run() {
         // Perform the operation.
         if req.event.IsWrite() {
             val := normalize(req.event.GetData(), size)
-            err := io.operations.Write(req.offset, size, val)
 
             // Debug?
             io.Debug(
@@ -124,6 +123,7 @@ func (io *IoHandler) Run() {
                 io.start.After(req.offset),
                 size)
 
+            err := io.operations.Write(req.offset, size, val)
             req.result <- err
 
         } else {

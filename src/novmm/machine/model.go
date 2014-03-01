@@ -75,3 +75,7 @@ func (model *Model) flush() error {
     // We're okay.
     return nil
 }
+
+func (model *Model) Devices() []Device {
+    return model.devices
+}

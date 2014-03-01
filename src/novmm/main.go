@@ -25,6 +25,7 @@ var system_map = flag.String("sysmap", "", "kernel symbol map")
 // Debug parameters.
 var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
+var debug = flag.Bool("debug", false, "devices start debugging")
 
 func main() {
     // Parse all command line options.
@@ -60,7 +61,7 @@ func main() {
     }
 
     // Load all devices.
-    proxy, err := model.LoadDevices(vm, []byte(*device_data))
+    proxy, err := model.LoadDevices(vm, []byte(*device_data), *debug)
     if err != nil {
         log.Fatal(err)
     }

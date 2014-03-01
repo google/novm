@@ -356,10 +356,10 @@ func (vchannel *VirtioChannel) Interrupt(queue bool) {
                 vchannel.VirtioDevice.msix.SendInterrupt(int(vchannel.CfgVec.Value))
             }
         }
+    } else {
+        // Just send a standard interrupt.
+        vchannel.VirtioDevice.Interrupt()
     }
-
-    // Just send a standard interrupt.
-    vchannel.VirtioDevice.Interrupt()
 }
 
 //
@@ -398,16 +398,16 @@ type VirtioDevice struct {
 // Our configuration space constants.
 //
 const (
-    VirtioOffsetHostCap     = 0
-    VirtioOffsetGuestCap    = 4
-    VirtioOffsetQueuePfn    = 8
-    VirtioOffsetQueueSize   = 12
-    VirtioOffsetQueueSel    = 14
-    VirtioOffsetQueueNotify = 16
-    VirtioOffsetStatus      = 18
-    VirtioOffsetIsr         = 19
-    VirtioOffsetCfgVec      = 20
-    VirtioOffsetQueueVec    = 22
+    VirtioOffsetHostCap     = 0x00
+    VirtioOffsetGuestCap    = 0x04
+    VirtioOffsetQueuePfn    = 0x08
+    VirtioOffsetQueueSize   = 0x0c
+    VirtioOffsetQueueSel    = 0x0e
+    VirtioOffsetQueueNotify = 0x10
+    VirtioOffsetStatus      = 0x12
+    VirtioOffsetIsr         = 0x13
+    VirtioOffsetCfgVec      = 0x14
+    VirtioOffsetQueueVec    = 0x16
 )
 
 type VirtioConf struct {
@@ -467,9 +467,9 @@ func (reg *VirtioConf) Read(offset uint64, size uint) (uint64, error) {
                 reg.Debug(
                     "virtio read @ %x->%x (msi-enabled)",
                     offset,
-                    offset-VirtioOffsetQueueVec-1)
+                    offset-VirtioOffsetQueueVec-2)
                 return reg.VirtioDevice.Config.Read(
-                    offset-VirtioOffsetQueueVec-1,
+                    offset-VirtioOffsetQueueVec-2,
                     size)
             }
         } else {
@@ -570,9 +570,9 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
                 reg.Debug(
                     "virtio write @ %x->%x (msi-enabled)",
                     offset,
-                    offset-VirtioOffsetQueueVec-1)
+                    offset-VirtioOffsetQueueVec-2)
                 return reg.VirtioDevice.Config.Write(
-                    offset-VirtioOffsetQueueVec-1,
+                    offset-VirtioOffsetQueueVec-2,
                     size,
                     value)
             }
@@ -686,7 +686,7 @@ const VirtioPciVendor = 0x1af4
 func NewPciVirtioDevice(
     info *DeviceInfo,
     class PciClass,
-    subsystem_id uint16,
+    subsystem_id PciSubsystemDeviceId,
     vectors uint) (*VirtioDevice, error) {
 
     // Allocate our pci device.
@@ -696,12 +696,13 @@ func NewPciVirtioDevice(
         PciDeviceId(0x1000+subsystem_id),
         class,
         PciRevision(0),
-        uint16(0),
+        PciSubsystemVendorId(0),
         subsystem_id)
     if err != nil {
         return nil, err
     }
 
+    // Create an MSI-enabled device.
     msix_device := NewMsiXDevice(device, 5, vectors)
     virtio := NewVirtioDevice(msix_device)
     device.PciBarSizes[0] = platform.PageSize

@@ -11,9 +11,10 @@ func (ram *Ram) Size() int {
     return len(*ram)
 }
 
-func (ram *Ram) GrowTo(offset int) {
-    if offset >= len(*ram) {
-        new_bytes := make([]byte, 1+offset-len(*ram), 1+offset-len(*ram))
+func (ram *Ram) GrowTo(size int) {
+    if size > len(*ram) {
+        missing := size - len(*ram)
+        new_bytes := make([]byte, missing, missing)
         *ram = append(*ram, new_bytes...)
     }
 }
@@ -55,7 +56,7 @@ func (ram *Ram) Read(offset uint64, size uint) (uint64, error) {
     value := uint64(math.MaxUint64)
 
     // Is it greater than our size?
-    if offset+uint64(size) >= uint64(ram.Size()) {
+    if offset+uint64(size) > uint64(ram.Size()) {
         // Ignore.
         return value, nil
     }
@@ -78,7 +79,7 @@ func (ram *Ram) Read(offset uint64, size uint) (uint64, error) {
 func (ram *Ram) Write(offset uint64, size uint, value uint64) error {
 
     // Is it greater than our size?
-    if offset+uint64(size) >= uint64(ram.Size()) {
+    if offset+uint64(size) > uint64(ram.Size()) {
         // Ignore.
         return nil
     }

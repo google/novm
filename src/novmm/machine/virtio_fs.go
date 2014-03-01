@@ -94,7 +94,7 @@ func NewVirtioMmioFs(info *DeviceInfo) (Device, error) {
 }
 
 func NewVirtioPciFs(info *DeviceInfo) (Device, error) {
-    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p, 4)
+    device, err := NewPciVirtioDevice(info, PciClassMisc, VirtioType9p, 16)
     if err != nil {
         return nil, err
     }
@@ -114,7 +114,7 @@ func (fs *VirtioFsDevice) Attach(vm *platform.Vm, model *Model) error {
 
     // Make sure the config reflects our tag.
     tag_bytes := []byte(fs.Tag)
-    fs.Config.GrowTo(2 + len(tag_bytes))
+    fs.Config.GrowTo(2 + len(tag_bytes) + 1)
     fs.Config.Set16(0, uint16(len(tag_bytes)))
     for i := 0; i < len(tag_bytes); i += 1 {
         fs.Config.Set8(2+i, uint8(tag_bytes[i]))

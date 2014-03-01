@@ -25,6 +25,7 @@ type Device interface {
 
     Debug(format string, v ...interface{})
     IsDebugging() bool
+    SetDebugging(debug bool)
 }
 
 func (device *BaseDevice) Init(info *DeviceInfo) error {
@@ -59,6 +60,10 @@ func (device *BaseDevice) Debug(format string, v ...interface{}) {
 
 func (device *BaseDevice) IsDebugging() bool {
     return device.info.Debug
+}
+
+func (device *BaseDevice) SetDebugging(debug bool) {
+    device.info.Debug = debug
 }
 
 func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {

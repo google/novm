@@ -8,7 +8,8 @@ import (
 
 func (model *Model) LoadDevices(
     vm *platform.Vm,
-    data []byte) (Proxy, error) {
+    data []byte,
+    debug bool) (Proxy, error) {
 
     // The first proxy decoded.
     var proxy Proxy
@@ -26,6 +27,11 @@ func (model *Model) LoadDevices(
         device, err := info.Load()
         if err != nil {
             return nil, err
+        }
+
+        if debug {
+            // Set our debug param.
+            device.SetDebugging(debug)
         }
 
         // Try the attach.
