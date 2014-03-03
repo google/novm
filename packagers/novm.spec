@@ -8,7 +8,7 @@ URL: %{url}
 Packager: %{maintainer}
 BuildArch: %{architecture}
 BuildRoot: %{_tmppath}/%{name}.%{version}-buildroot
-Requires: dnsmasq, bridge-utils
+Requires: dnsmasq, bridge-utils, fakeroot
 
 # To prevent ypm/rpm/zypper/etc from complaining about FileDigests when
 # installing we set the algorithm explicitly to MD5SUM. This should be

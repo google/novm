@@ -5,4 +5,4 @@ Architecture: ARCHITECTURE
 Maintainer: MAINTAINER
 Description: SUMMARY
 Homepage: URL
-Depends: dnsmasq, bridge-utils
+Depends: dnsmasq, bridge-utils, fakeroot
