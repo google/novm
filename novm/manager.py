@@ -375,6 +375,7 @@ class NovmManager(object):
             name=cli.StrOpt("The instance name."),
             env=cli.ListOpt("Specify an environment variable."),
             cwd=cli.StrOpt("The process working directory."),
+            namespace=cli.BoolOpt("Run the process in a new namespace."),
             *command):
 
         """ Execute a command inside a novm. """
@@ -386,7 +387,7 @@ class NovmManager(object):
         ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
         ctrl = control.Control(ctrl_path, bind=False)
 
-        return ctrl.run(command, env=env, cwd=cwd)
+        return ctrl.run(command, env=env, cwd=cwd, namespace=namespace)
 
     def _is_alive(self, pid):
         """ Is this process still around? """

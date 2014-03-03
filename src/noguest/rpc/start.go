@@ -29,6 +29,9 @@ type StartCommand struct {
 
     // The environment.
     Environment []string `json:"environment"`
+
+    // Use a separate namespace?
+    Namespace bool `json:"namespace"`
 }
 
 type StartResult struct {
@@ -122,14 +125,20 @@ func (server *Server) Start(
     }
 
     // Start the process.
+    clone_flags := uintptr(0)
+    if command.Namespace {
+        clone_flags |= syscall.CLONE_NEWNS
+        clone_flags |= syscall.CLONE_NEWPID
+    }
     proc_attr := &os.ProcAttr{
         Dir:   command.Cwd,
         Env:   command.Environment,
         Files: []*os.File{slave, slave, slave},
         Sys: &syscall.SysProcAttr{
-            Setsid:  true,
-            Setctty: true,
-            Ctty:    0,
+            Setsid:     true,
+            Setctty:    true,
+            Ctty:       0,
+            Cloneflags: clone_flags,
         },
     }
     proc, err := os.StartProcess(
