@@ -257,11 +257,6 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
                     buf.index)
 
                 vchannel.incoming <- buf
-
-                // Interrupt the guest?
-                if buf_flags == C.__u16(0) {
-                    vchannel.Interrupt(true)
-                }
                 break
 
             } else {
