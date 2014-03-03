@@ -84,9 +84,6 @@ class NovmManager(object):
         """ 
         Run a new instance.
 
-        Note that this does not return (and therefore can
-        only be used once inside a 'do' file).
-
         Network definitions are provided as --nic [opt=val],...
 
             Available options are:
@@ -119,7 +116,7 @@ class NovmManager(object):
             Note that these is always an implicit write path,
             which is a temporary directory for the instance.
 
-                temp_dir=>/
+                /=>temp_dir
 
         Docker repositories are provided as follows.
 
@@ -336,7 +333,21 @@ class NovmManager(object):
             name=cli.StrOpt("The instance name."),
             *command):
 
-        """ Execute a control command. """
+        """
+        Execute a control command.
+
+        Available commands depend on the VMM.
+
+        For example:
+
+            To pause the first VCPU:
+
+                vcpu id=0 paused=true
+
+            To enable tracing:
+
+                trace enable=true
+        """
         if len(command) == 0:
             raise Exception("Need to provide a command.")
 
