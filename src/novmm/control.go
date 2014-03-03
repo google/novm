@@ -9,7 +9,6 @@ import (
     "novmm/machine"
     "novmm/platform"
     "os"
-    "regexp"
     "sync"
     "syscall"
 )
@@ -43,75 +42,6 @@ type Control struct {
     client_once  sync.Once
     client_codec rpc.ClientCodec
     client       *rpc.Client
-}
-
-type VmSettings struct {
-}
-
-type DeviceSettings struct {
-    // Name.
-    Name string `json:"name"`
-
-    // Debug?
-    Debug bool `json:"debug"`
-}
-
-type TraceSettings struct {
-    // Tracing?
-    Enable bool `json:"enable"`
-}
-
-type VcpuSettings struct {
-    // Which vcpu?
-    Id  int `json:"id"`
-
-    // Single stepping?
-    Step bool `json:"step"`
-}
-
-func (control *Control) Vm(settings *VmSettings, ok *bool) error {
-    *ok = true
-    return nil
-}
-
-func (control *Control) Device(settings *DeviceSettings, ok *bool) error {
-
-    rp, err := regexp.Compile(settings.Name)
-    if err != nil {
-        return err
-    }
-
-    for _, device := range control.model.Devices() {
-        if rp.MatchString(device.Name()) {
-            device.SetDebugging(settings.Debug)
-        }
-    }
-
-    *ok = true
-    return nil
-}
-
-func (control *Control) Trace(settings *TraceSettings, ok *bool) error {
-    if settings.Enable {
-        control.tracer.Enable()
-    } else {
-        control.tracer.Disable()
-    }
-    *ok = true
-    return nil
-}
-
-func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
-    // A valid vcpu?
-    vcpus := control.vm.GetVcpus()
-    if settings.Id >= len(vcpus) {
-        *ok = false
-        return syscall.EINVAL
-    }
-    vcpu := vcpus[settings.Id]
-    err := vcpu.SetStepping(settings.Step)
-    *ok = (err == nil)
-    return err
 }
 
 func (control *Control) handle(
