@@ -347,19 +347,10 @@ class NovmManager(object):
 
         norm_kwargs = dict()
         for (k, v) in kwargs.items():
-            try:
-                # Is it an int?
-                v = int(v)
-            except ValueError:
-                pass
-
-            # How about a bool?
-            if v.lower() == "false":
-                v = False
-            elif v.lower() == "true":
-                v = True
-
-            norm_kwargs[k] = v
+            # Deserialize as JSON object.
+            # This gives us strings, integers,
+            # dictionaries, lists, etc. for free.
+            norm_kwargs[k] = json.loads(v)
 
         obj_id = self._instances.find(obj_id=id, name=name)
 
