@@ -113,7 +113,7 @@ forward to add support for multiboot guests, like FreeBSD.
 Requirements
 ------------
 
-*novm* requires at least go 1.1.
+*novm* requires at least go 1.1 in order to build.
 
 Technical Details
 -----------------
@@ -192,34 +192,3 @@ The device model implemented by this kernel is substantially different from
 most VMs. Instead of attemping to emulate a legacy machine, we instead to
 support only the mechanisms which make sense for a next generation
 purpose-built Virtual Machine.
-
-#### What does it not have? ####
-
-* No I/O ports.
-
-There are no supported I/O port devices.
-
-* No PCI bus.
-
-Nope, none of that either.
-
-* No ACPI.
-
-Instead, we use a device tree to provide a full hardware specification to the
-guest operating system. This eliminates waste and layers of abstraction by
-allowing the hypervisor to very cleanly and completely specify available
-devices.
-
-#### What does it have? ####
-
-* Memory-mapped Virt-I/O devices in user-space.
-
-We only support efficient paravirtualized devices via a direct map.
-
-* In-kernel LAPICs, IOAPIC, and PIT.
-
-Basic emulation is provided in-kernel, eliminating transitions.
-
-* Eventfd-driven interrupts.
-
-The only exits to user-space are those to configure the virtual device.
