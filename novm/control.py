@@ -142,6 +142,7 @@ class Control(object):
                     if data:
                         data = binascii.b2a_base64(data)
                     json.dump(data, fobj)
+                    fobj.write("\n")
                     fobj.flush()
                     if not data:
                         # We don't close the socket.
