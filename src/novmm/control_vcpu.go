@@ -10,6 +10,9 @@ type VcpuSettings struct {
 
     // Single stepping?
     Step bool `json:"step"`
+
+    // Paused?
+    Paused bool `json:"paused"`
 }
 
 func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
@@ -21,6 +24,11 @@ func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
     }
     vcpu := vcpus[settings.Id]
     err := vcpu.SetStepping(settings.Step)
+    if settings.Paused {
+        vcpu.Pause()
+    } else {
+        vcpu.Unpause()
+    }
     *ok = (err == nil)
     return err
 }

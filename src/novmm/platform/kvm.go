@@ -200,6 +200,14 @@ type Vcpu struct {
 
     // Is this stepping?
     is_stepping bool
+
+    // Is this paused?
+    is_paused bool
+
+    // Our run lock.
+    runLock    *sync.Mutex
+    pauseCond  *sync.Cond
+    resumeCond *sync.Cond
 }
 
 // The size of the mmap structure.
@@ -394,11 +402,15 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     kvm_run := (*C.struct_kvm_run)(unsafe.Pointer(&mmap[0]))
 
     // Add our Vcpu.
+    runLock := &sync.Mutex{}
     vcpu := &Vcpu{
-        fd:      int(vcpufd),
-        vcpu_id: vcpu_id,
-        mmap:    mmap,
-        kvm:     kvm_run,
+        fd:         int(vcpufd),
+        vcpu_id:    vcpu_id,
+        mmap:       mmap,
+        kvm:        kvm_run,
+        runLock:    runLock,
+        resumeCond: sync.NewCond(runLock),
+        pauseCond:  sync.NewCond(runLock),
     }
     vm.vcpus = append(vm.vcpus, vcpu)
     vm.next_id += 1
@@ -673,4 +685,46 @@ func (vcpu *Vcpu) SetStepping(step bool) error {
         vcpu.is_stepping = step
     }
     return err
+}
+
+func (vcpu *Vcpu) Pause() {
+
+    // Acquire our runlock.
+    // This prevents the vcpu from executing,
+    // although it may currently be in KVM_RUN.
+    vcpu.runLock.Lock()
+    defer vcpu.runLock.Unlock()
+
+    // See if we're currently paused.
+    if vcpu.is_paused {
+        return
+    }
+
+    // Twiddle the debug bit.
+    // This will cause the vcpu to exit, and it
+    // won't be able to re-enter the loop (above).
+    vcpu.setSingleStep(true)
+    if !vcpu.is_stepping {
+        vcpu.setSingleStep(false)
+    }
+
+    // Wait for the vcpu to notify that it is paused.
+    vcpu.is_paused = true
+    vcpu.pauseCond.Wait()
+}
+
+func (vcpu *Vcpu) Unpause() {
+
+    // Acquire our runlock.
+    vcpu.runLock.Lock()
+    defer vcpu.runLock.Unlock()
+
+    // Are we already running?
+    if !vcpu.is_paused {
+        return
+    }
+
+    // Allow the vcpu to resume.
+    vcpu.is_paused = false
+    vcpu.resumeCond.Broadcast()
 }

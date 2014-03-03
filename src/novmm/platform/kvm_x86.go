@@ -128,8 +128,17 @@ func (vcpu *Vcpu) Run() error {
         return err
     }
 
-    // Execute our run ioctl.
     for {
+        // Ensure we can run.
+        // For exact semantics, see Pause() and Unpause().
+        vcpu.runLock.Lock()
+        for vcpu.is_paused {
+            vcpu.pauseCond.Broadcast()
+            vcpu.resumeCond.Wait()
+        }
+        vcpu.runLock.Unlock()
+
+        // Execute our run ioctl.
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vcpu.fd),
