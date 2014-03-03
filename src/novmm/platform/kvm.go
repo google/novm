@@ -20,6 +20,7 @@ const int Translate = KVM_TRANSLATE;
 const int GetSupportedCpuid = KVM_GET_SUPPORTED_CPUID;
 const int SetCpuid = KVM_SET_CPUID2;
 const int SignalMsi = KVM_SIGNAL_MSI;
+const int IoEventFd = KVM_IOEVENTFD;
 
 // States.
 const int MpStateRunnable = KVM_MP_STATE_RUNNABLE;
@@ -31,6 +32,9 @@ const int MpStateSipiReceived = KVM_MP_STATE_SIPI_RECEIVED;
 // IOCTL flags.
 const int MemLogDirtyPages = KVM_MEM_LOG_DIRTY_PAGES;
 const int GuestDebugFlags = KVM_GUESTDBG_ENABLE|KVM_GUESTDBG_SINGLESTEP;
+const int IoEventFdFlagPio = KVM_IOEVENTFD_FLAG_PIO;
+const int IoEventFdFlagDatamatch = KVM_IOEVENTFD_FLAG_DATAMATCH;
+const int IoEventFdFlagDeassign = KVM_IOEVENTFD_FLAG_DEASSIGN;
 
 // Capabilities (extensions).
 const int CapUserMem = KVM_CAP_USER_MEMORY;
@@ -162,6 +166,9 @@ type Vm struct {
     // At the moment, we just expose the full
     // host flags to the guest.
     cpuid []byte
+
+    // Eventfds are enabled?
+    use_eventfds bool
 
     // Our vcpus.
     vcpus []*Vcpu
@@ -547,15 +554,55 @@ func (vm *Vm) MapReservedMemory(
     return nil
 }
 
+func (vm *Vm) SetEventFd(
+    eventfd *EventFd,
+    paddr Paddr,
+    size uint,
+    is_pio bool,
+    unbind bool,
+    has_value bool,
+    value uint64) error {
+
+    var ioeventfd C.struct_kvm_ioeventfd
+    ioeventfd.addr = C.__u64(paddr)
+    ioeventfd.len = C.__u32(size)
+    ioeventfd.fd = C.__s32(eventfd.Fd())
+
+    if is_pio {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagPio)
+    }
+    if unbind {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDeassign)
+    }
+    if has_value {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDatamatch)
+        ioeventfd.datamatch = C.__u64(value)
+    }
+
+    // Bind / unbind the eventfd.
+    _, _, e := syscall.Syscall(
+        syscall.SYS_IOCTL,
+        uintptr(vm.fd),
+        uintptr(C.IoEventFd),
+        uintptr(unsafe.Pointer(&ioeventfd)))
+    if e != 0 {
+        return e
+    }
+
+    // Success.
+    return nil
+}
+
 func (vcpu *Vcpu) setSingleStep(on bool) error {
 
-    // Execute our debug ioctl.
     var guest_debug C.struct_kvm_guest_debug
     if on {
         guest_debug.control = C.__u32(C.GuestDebugFlags)
     } else {
         guest_debug.control = 0
     }
+
+    // Execute our debug ioctl.
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),

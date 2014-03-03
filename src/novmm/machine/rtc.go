@@ -219,8 +219,8 @@ func NewRtc(info *DeviceInfo) (Device, error) {
     rtc.PioDevice.Offset = 0x70
     rtc.PioDevice.IoMap = IoMap{
         // Our configuration ports.
-        MemoryRegion{0, 1}: &RtcAddr{rtc},
-        MemoryRegion{1, 1}: &RtcData{rtc},
+        MemoryRegion{0, 1}: &RtcAddr{Rtc: rtc},
+        MemoryRegion{1, 1}: &RtcData{Rtc: rtc},
     }
 
     return rtc, rtc.Init(info)

@@ -333,8 +333,8 @@ func NewPciBus(info *DeviceInfo) (Device, error) {
     bus.devices = make([]*PciDevice, 0, 0)
     bus.PioDevice.IoMap = IoMap{
         // Our configuration ports.
-        MemoryRegion{0xcf8, 4}: &PciConfAddr{bus},
-        MemoryRegion{0xcfc, 4}: &PciConfData{bus},
+        MemoryRegion{0xcf8, 4}: &PciConfAddr{PciBus: bus},
+        MemoryRegion{0xcfc, 4}: &PciConfData{PciBus: bus},
     }
 
     // Return our bus and device.

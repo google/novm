@@ -5,6 +5,7 @@ import (
 )
 
 type Register struct {
+    // The value of the register.
     Value uint64 `json:"value"`
 
     // Read-only bits?

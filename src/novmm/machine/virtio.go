@@ -520,7 +520,13 @@ func (reg *VirtioConf) Write(offset uint64, size uint, value uint64) error {
                 }
             }
         }
-        return reg.QueueNotify.Write(0, size, value)
+        err := reg.QueueNotify.Write(0, size, value)
+        if err != nil {
+            return err
+        }
+
+        // This is a saveable register.
+        return SaveIO
 
     case VirtioOffsetStatus:
         if value == VirtioStatusReboot {

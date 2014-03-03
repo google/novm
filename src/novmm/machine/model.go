@@ -56,21 +56,21 @@ func NewModel(vm *platform.Vm) (*Model, error) {
 
 func (model *Model) flush() error {
 
-    collectIoHandlers := func(is_mmio bool) []IoHandlers {
+    collectIoHandlers := func(is_pio bool) []IoHandlers {
         io_handlers := make([]IoHandlers, 0, 0)
         for _, device := range model.devices {
-            if is_mmio {
-                io_handlers = append(io_handlers, device.MmioHandlers())
-            } else {
+            if is_pio {
                 io_handlers = append(io_handlers, device.PioHandlers())
+            } else {
+                io_handlers = append(io_handlers, device.MmioHandlers())
             }
         }
         return io_handlers
     }
 
     // (Re-)Create our IoCache.
-    model.pio_cache = NewIoCache(collectIoHandlers(false))
-    model.mmio_cache = NewIoCache(collectIoHandlers(true))
+    model.pio_cache = NewIoCache(collectIoHandlers(true), true)
+    model.mmio_cache = NewIoCache(collectIoHandlers(false), false)
 
     // We're okay.
     return nil

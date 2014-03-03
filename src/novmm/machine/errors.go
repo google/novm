@@ -31,3 +31,12 @@ func DriverUnknown(name string) error {
 
 // Virtio errors.
 var VirtioInvalidQueueSize = errors.New("Invalid VirtIO queue size!")
+
+// I/O memoize errors.
+// This is an internal-only error which is returned from
+// a write handler. When this is returned (and the cache
+// has had a significant number of hits at that address)
+// we will create an eventfd for that particular address
+// and value. This will reduce the number of kernel-user
+// switches necessary to handle that particular address.
+var SaveIO = errors.New("Save I/O request (internal error).")

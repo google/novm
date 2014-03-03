@@ -8,6 +8,7 @@ import (
 )
 
 func Loop(
+    vm *platform.Vm,
     vcpu *platform.Vcpu,
     model *machine.Model,
     tracer *loader.Tracer) error {
@@ -32,10 +33,10 @@ func Loop(
         // Handle the error.
         switch err.(type) {
         case *platform.ExitPio:
-            err = model.HandlePio(err.(*platform.ExitPio))
+            err = model.HandlePio(vm, err.(*platform.ExitPio))
 
         case *platform.ExitMmio:
-            err = model.HandleMmio(err.(*platform.ExitMmio))
+            err = model.HandleMmio(vm, err.(*platform.ExitMmio))
 
         case *platform.ExitDebug:
             err = nil

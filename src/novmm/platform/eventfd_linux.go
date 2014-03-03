@@ -28,7 +28,7 @@ import (
 // In the future, this is a great opportunity to improve
 // the core archiecture (and eliminate a few system threads).
 
-type EventFD struct {
+type EventFd struct {
     // Underlying FD.
     // NOTE: In reality we may want to serialize read/write
     // access to this fd as I'm fairly sure we will end up
@@ -38,7 +38,7 @@ type EventFD struct {
     fd int
 }
 
-func NewEventFD() (*EventFD, error) {
+func NewEventFd() (*EventFd, error) {
     // Create new eventfd.
     // NOTE: It's critical that it's non-blocking for the hub
     // integration below (otherwise it'll just end up blocking
@@ -54,15 +54,19 @@ func NewEventFD() (*EventFD, error) {
         return nil, syscall.Errno(e)
     }
 
-    eventfd := &EventFD{fd: int(fd)}
+    eventfd := &EventFd{fd: int(fd)}
     return eventfd, nil
 }
 
-func (fd *EventFD) Close() error {
+func (fd *EventFd) Close() error {
     return syscall.Close(fd.fd)
 }
 
-func (fd *EventFD) Wait() (uint64, error) {
+func (fd *EventFd) Fd() int {
+    return fd.fd
+}
+
+func (fd *EventFd) Wait() (uint64, error) {
     for {
         var val uint64
         _, _, err := syscall.Syscall(
@@ -83,7 +87,7 @@ func (fd *EventFD) Wait() (uint64, error) {
     return 0, nil
 }
 
-func (fd *EventFD) Signal(val uint64) error {
+func (fd *EventFd) Signal(val uint64) error {
     for {
         var val uint64
         _, _, err := syscall.Syscall(

@@ -15,6 +15,9 @@ var control_fd = flag.Int("controlfd", -1, "bound control socket")
 var vcpu_data = flag.String("vcpus", "[]", "list of vcpu states")
 var device_data = flag.String("devices", "[]", "list of device states")
 
+// Functional flags.
+var eventfds = flag.Bool("eventfds", false, "enable eventfds")
+
 // Linux parameters.
 var boot_params = flag.String("setup", "", "linux boot params (vmlinuz)")
 var vmlinux = flag.String("vmlinux", "", "linux kernel binary (ELF)")
@@ -37,6 +40,9 @@ func main() {
         log.Fatal(err)
     }
     defer vm.Dispose()
+    if *eventfds {
+        vm.EnableEventFds()
+    }
 
     // Create the machine model.
     model, err := machine.NewModel(vm)
@@ -98,7 +104,7 @@ func main() {
     for _, vcpu := range vcpus {
         go func(vcpu *platform.Vcpu) {
             defer vcpu.Dispose()
-            err := Loop(vcpu, model, tracer)
+            err := Loop(vm, vcpu, model, tracer)
             if err != nil {
                 vcpu.Dump()
             }

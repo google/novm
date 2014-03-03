@@ -70,16 +70,16 @@ const (
 )
 
 type UartData struct {
-    uart *Uart
+    *Uart
 }
 
 type UartIntr struct {
-    uart *Uart
+    *Uart
 }
 
 func (uart *UartData) Read(offset uint64, size uint) (uint64, error) {
-    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
-        return uart.uart.Dll.Read(offset, size)
+    if uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.Dll.Read(offset, size)
     }
 
     // No data available.
@@ -87,8 +87,8 @@ func (uart *UartData) Read(offset uint64, size uint) (uint64, error) {
 }
 
 func (uart *UartData) Write(offset uint64, size uint, value uint64) error {
-    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
-        return uart.uart.Dll.Write(offset, size, value)
+    if uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.Dll.Write(offset, size, value)
     }
 
     // Ignore return value.
@@ -97,19 +97,19 @@ func (uart *UartData) Write(offset uint64, size uint, value uint64) error {
 }
 
 func (uart *UartIntr) Read(offset uint64, size uint) (uint64, error) {
-    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
-        return uart.uart.Dlh.Read(offset, size)
+    if uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.Dlh.Read(offset, size)
     }
 
-    return uart.uart.Ier.Read(offset, size)
+    return uart.Ier.Read(offset, size)
 }
 
 func (uart *UartIntr) Write(offset uint64, size uint, value uint64) error {
-    if uart.uart.Lcr.Value&UartLcrDLAB != 0 {
-        return uart.uart.Dlh.Write(offset, size, value)
+    if uart.Lcr.Value&UartLcrDLAB != 0 {
+        return uart.Dlh.Write(offset, size, value)
     }
 
-    return uart.uart.Ier.Write(offset, size, value)
+    return uart.Ier.Write(offset, size, value)
 }
 
 type Uart struct {
@@ -139,8 +139,8 @@ func NewUart(info *DeviceInfo) (Device, error) {
     // Create our IOmap.
     uart.PioDevice.IoMap = IoMap{
         // Our configuration ports.
-        MemoryRegion{0, 1}: &UartData{uart},
-        MemoryRegion{1, 1}: &UartIntr{uart},
+        MemoryRegion{0, 1}: &UartData{Uart: uart},
+        MemoryRegion{1, 1}: &UartIntr{Uart: uart},
         MemoryRegion{2, 1}: &uart.Iir, // Interrupt identification.
         MemoryRegion{3, 1}: &uart.Lcr, // Line control register.
         MemoryRegion{4, 1}: &uart.Mcr, // Modem control register.
