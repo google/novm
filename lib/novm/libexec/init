@@ -22,7 +22,7 @@ modprobe 9p
 
 # Mount our root context.
 mkdir -p /sysroot
-mount -t 9p -o trans=virtio,version=9p2000.u,rw root /sysroot
+mount -t 9p -o trans=virtio,version=9p2000.u,cache=fscache,access=any,rw root /sysroot
 
 # Mount our init context.
 # We stash the init binary inside file descriptor 3.
@@ -30,7 +30,7 @@ mount -t 9p -o trans=virtio,version=9p2000.u,rw root /sysroot
 # while still executing this process once we're in the
 # real root filesystem.
 mkdir -p /sysinit
-mount -t 9p -o trans=virtio,version=9p2000.u,ro init /sysinit
+mount -t 9p -o trans=virtio,version=9p2000.u,cache=fscache,access=any,ro init /sysinit
 exec 3</sysinit/init
 umount -l /sysinit
 
