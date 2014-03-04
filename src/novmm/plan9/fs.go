@@ -356,12 +356,12 @@ done:
         fs.fileLock.Lock()
         for fidno, fid := range fs.Fidpool {
             log.Printf(
-                "  fidno %d: %d refs (%s)",
+                "  fidno %x: %d refs (%s)",
                 fidno, fid.Refs, fid.file)
         }
         for path, file := range fs.files {
             log.Printf(
-                "  file %d: %s => %d refs",
+                "  file %x: %s => %d refs",
                 file.Qid.Path, path, file.refs)
         }
         fs.fidLock.Unlock()

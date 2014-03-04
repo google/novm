@@ -175,8 +175,7 @@ func Unpack(
     }
 
     if buf.ReadLeft() < 0 {
-        log.Printf("buffer overun?")
-        return nil, BufferInsufficient
+        log.Printf("buffer overrun?")
     }
 
     return fc, err
