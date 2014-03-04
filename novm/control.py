@@ -76,7 +76,7 @@ class Control(object):
 
         return obj.get("result")
 
-    def run(self, command, env=None, cwd=None, namespace=False):
+    def run(self, command, env=None, cwd=None):
         if env is None:
             env = ["%s=%s" % (k,v) for (k,v) in os.environ.items()]
         if cwd is None:
@@ -93,7 +93,6 @@ class Control(object):
             "command": command,
             "environment": env,
             "cwd": cwd,
-            "namespace": namespace,
         }
         json.dump(start_cmd, fobj)
         fobj.flush()

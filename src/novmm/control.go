@@ -18,6 +18,9 @@ type Control struct {
     // The bound control fd.
     control_fd int
 
+    // Should this instance use a real init?
+    real_init bool
+
     // Our device model.
     model *machine.Model
 
@@ -31,13 +34,11 @@ type Control struct {
     proxy machine.Proxy
 
     // Our bound client (to the in-guest agent).
-    // NOTE: We have this setup as a lazy
-    // function because the guest may take
-    // some small amount of time before its
-    // actually ready to process RPC requests.
-    // But we don't want this to interfere
-    // with our ability to process our host
-    // side RPC requests.
+    // NOTE: We have this setup as a lazy function
+    // because the guest may take some small amount of
+    // time before it's actually ready to process RPC
+    // requests. We don't want this to interfere with
+    // our ability to process our host-side requests.
     client_err   error
     client_once  sync.Once
     client_codec rpc.ClientCodec
@@ -183,23 +184,6 @@ func (control *Control) handle(
     }
 }
 
-func (control *Control) barrier() {
-    buffer := make([]byte, 1, 1)
-    n, err := control.proxy.Read(buffer)
-    if n == 1 && err == nil {
-        control.client_err = nil
-        control.client_codec = jsonrpc.NewClientCodec(control.proxy)
-        control.client = rpc.NewClientWithCodec(control.client_codec)
-    } else if err != nil {
-        control.client_err = err
-    }
-}
-
-func (control *Control) ready() (*rpc.Client, error) {
-    control.client_once.Do(control.barrier)
-    return control.client, control.client_err
-}
-
 func (control *Control) serve() {
 
     // Bind our rpc server.
@@ -217,6 +201,7 @@ func (control *Control) serve() {
 
 func NewControl(
     control_fd int,
+    real_init bool,
     model *machine.Model,
     vm *platform.Vm,
     tracer *loader.Tracer,
@@ -225,6 +210,7 @@ func NewControl(
     // Create our control object.
     control := new(Control)
     control.control_fd = control_fd
+    control.real_init = real_init
     control.vm = vm
     control.tracer = tracer
     control.proxy = proxy

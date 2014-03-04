@@ -68,6 +68,7 @@ class NovmManager(object):
             vcpus=cli.IntOpt("The number of vcpus."),
             memsize=cli.IntOpt("The member size (in mb)."),
             kernel=cli.StrOpt("The kernel to use."),
+            init=cli.BoolOpt("Use a real init?"),
             nic=cli.ListOpt("Define a network device."),
             disk=cli.ListOpt("Define a block device."),
             pack=cli.ListOpt("Use a given read pack."),
@@ -167,6 +168,10 @@ class NovmManager(object):
             # Is our kernel valid?
             if kernel not in self._kernels.list():
                 raise Exception("Kernel not found!")
+
+            # Are we using a real init?
+            if init:
+                args.extend(["-init"])
 
             # Always add basic devices.
             devices.append(basic.Bios())
@@ -375,7 +380,6 @@ class NovmManager(object):
             name=cli.StrOpt("The instance name."),
             env=cli.ListOpt("Specify an environment variable."),
             cwd=cli.StrOpt("The process working directory."),
-            namespace=cli.BoolOpt("Run the process in a new namespace."),
             *command):
 
         """ Execute a command inside a novm. """
@@ -387,7 +391,7 @@ class NovmManager(object):
         ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
         ctrl = control.Control(ctrl_path, bind=False)
 
-        return ctrl.run(command, env=env, cwd=cwd, namespace=namespace)
+        return ctrl.run(command, env=env, cwd=cwd)
 
     def _is_alive(self, pid):
         """ Is this process still around? """

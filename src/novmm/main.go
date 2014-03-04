@@ -17,6 +17,7 @@ var device_data = flag.String("devices", "[]", "list of device states")
 
 // Functional flags.
 var eventfds = flag.Bool("eventfds", false, "enable eventfds")
+var real_init = flag.Bool("init", false, "real in-guest init?")
 
 // Linux parameters.
 var boot_params = flag.String("setup", "", "linux boot params (vmlinuz)")
@@ -116,7 +117,7 @@ func main() {
     if *control_fd == -1 {
         log.Fatal(InvalidControlSocket)
     }
-    control := NewControl(*control_fd, model, vm, tracer, proxy)
+    control := NewControl(*control_fd, *real_init, model, vm, tracer, proxy)
     go control.serve()
 
     // Wait until we get a signal,
