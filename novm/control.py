@@ -97,19 +97,23 @@ class Control(object):
         json.dump(start_cmd, fobj)
         fobj.flush()
 
-        # Check for a basic error.
-        obj = json.loads(fobj.readline())
-        if obj is not None:
-            raise Exception(obj)
-
-        # Remember our exitcode.
-        exitcode = 1
-
         try:
             # Save our terminal attributes and
             # enable raw mode for the terminal.
             orig_tc_attrs = termios.tcgetattr(0)
             tty.setraw(0)
+
+            # Remember our exitcode.
+            exitcode = 1
+
+            # Expect our first object to be a None.
+            # This indicates that we've started with
+            # no errors. If it's a string -- error.
+            started = False
+
+            # We use a standard SSH-like escape.
+            # Remember if we've seen an ~ already.
+            seen_tilde = False
 
             # Poll and transform the event stream.
             # This will basically turn this process
@@ -122,6 +126,13 @@ class Control(object):
                 if fobj in to_read:
                     # Decode the object.
                     obj = json.loads(fobj.readline())
+
+                    if not started:
+                        # See note abouve started.
+                        if obj is not None:
+                            raise Exception(obj)
+                        started = True
+                        continue
 
                     if obj is None:
                         # Server is done.
@@ -139,8 +150,17 @@ class Control(object):
                 if sys.stdin in to_read:
 
                     data = os.read(sys.stdin.fileno(), 4096)
+
+                    if data == "~":
+                        seen_tilde = not seen_tilde
+                    elif seen_tilde and data == ".":
+                        break
+                    elif seen_tilde:
+                        seen_tilde = False
+
                     if data:
                         data = binascii.b2a_base64(data)
+
                     json.dump(data, fobj)
                     fobj.write("\n")
                     fobj.flush()
