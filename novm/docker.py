@@ -148,6 +148,7 @@ class RegistryClient(object):
                 if not content:
                     break
                 output.write(content)
+            output.flush()
         else:
             # Interpret as JSON (since we requested it).
             content = resp.read()
@@ -164,7 +165,7 @@ class RegistryClient(object):
             else:
                 parent = None
 
-        except KeyError:
+        except (IOError, KeyError):
             # Fetch object information.
             image_info = self.image_info(repository, image_id)
 
@@ -187,7 +188,8 @@ class RegistryClient(object):
                 self.image_download(repository, image_id, tf)
 
                 # Extract.
-                subprocess.call([
+                subprocess.check_call([
+                    "fakeroot",
                     "tar",
                     "-C", os.path.abspath(image_dir),
                     "-xf", os.path.abspath(tf.name),
