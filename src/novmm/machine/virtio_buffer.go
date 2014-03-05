@@ -188,6 +188,11 @@ func (buf *VirtioBuffer) Map(
     offset int,
     length int) Ram {
 
+    // Empty read?
+    if length == 0 {
+        return []byte{}
+    }
+
     for _, data := range buf.data {
         if offset >= len(data) {
             offset -= len(data)
