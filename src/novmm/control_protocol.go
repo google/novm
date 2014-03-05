@@ -6,8 +6,30 @@ import (
     "noguest/protocol"
 )
 
-func (control *Control) barrier() {
+func (control *Control) init() {
+
     buffer := make([]byte, 1, 1)
+
+    // Read our control byte back.
+    n, err := control.proxy.Read(buffer)
+    if n == 1 && err == nil {
+        switch buffer[0] {
+        case protocol.NoGuestStatusOkay:
+            break
+        case protocol.NoGuestStatusFailed:
+            // Something went horribly wrong.
+            control.client_res <- InternalGuestError
+            return
+        default:
+            // This isn't good, who knows what happened?
+            control.client_res <- protocol.UnknownStatus
+            return
+        }
+    } else if err != nil {
+        // An actual error.
+        control.client_res <- err
+        return
+    }
 
     // Send our control byte to noguest.
     // This essentially controls how the guest
@@ -22,35 +44,21 @@ func (control *Control) barrier() {
     } else {
         buffer[0] = protocol.NoGuestCommandFakeInit
     }
-    n, err := control.proxy.Write(buffer)
+    n, err = control.proxy.Write(buffer)
     if n != 1 {
         // Can't send anything?
-        control.client_err = InternalGuestError
+        control.client_res <- InternalGuestError
         return
     }
 
-    // REad our control byte back.
-    n, err = control.proxy.Read(buffer)
-    if n == 1 && err == nil {
-        switch buffer[0] {
-        case protocol.NoGuestStatusOkay:
-            control.client_err = nil
-            control.client_codec = jsonrpc.NewClientCodec(control.proxy)
-            control.client = rpc.NewClientWithCodec(control.client_codec)
-            break
-        case protocol.NoGuestStatusFailed:
-            // Something went horribly wrong.
-            control.client_err = InternalGuestError
-            return
-        default:
-            // This isn't good, who knows what happened?
-            control.client_err = protocol.UnknownStatus
-            return
-        }
-    } else if err != nil {
-        // An actual error.
-        control.client_err = err
-    }
+    // Looks like we're good.
+    control.client_res <- nil
+}
+
+func (control *Control) barrier() {
+    control.client_err = <-control.client_res
+    control.client_codec = jsonrpc.NewClientCodec(control.proxy)
+    control.client = rpc.NewClientWithCodec(control.client_codec)
 }
 
 func (control *Control) ready() (*rpc.Client, error) {

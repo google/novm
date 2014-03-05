@@ -39,6 +39,7 @@ type Control struct {
     // time before it's actually ready to process RPC
     // requests. We don't want this to interfere with
     // our ability to process our host-side requests.
+    client_res   chan error
     client_err   error
     client_once  sync.Once
     client_codec rpc.ClientCodec
@@ -214,6 +215,10 @@ func NewControl(
     control.vm = vm
     control.tracer = tracer
     control.proxy = proxy
+
+    // Start our barrier.
+    control.client_res = make(chan error)
+    go control.init()
 
     return control
 }
