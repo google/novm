@@ -36,6 +36,7 @@ func gqid(buf Buffer, qid *Qid) {
 }
 
 func gstat(buf Buffer, d *Dir, dotu bool) {
+    buf.Read16() // Read length.
     d.Type = buf.Read16()
     d.Dev = buf.Read32()
     gqid(buf, &d.Qid)
@@ -47,7 +48,6 @@ func gstat(buf Buffer, d *Dir, dotu bool) {
     d.Uid = buf.ReadString()
     d.Gid = buf.ReadString()
     d.Muid = buf.ReadString()
-
     if dotu {
         d.Ext = buf.ReadString()
         d.Uidnum = buf.Read32()

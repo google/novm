@@ -323,7 +323,7 @@ func (fs *Fs) Handle(req Buffer, resp Buffer, debug bool) error {
         }
 
     case Twstat:
-        err = fs.wstat(fid)
+        err = fs.wstat(fid, &fcall.Dir)
         if err == nil {
             err = PackRwstat(resp, fcall.Tag)
         }

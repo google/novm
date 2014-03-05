@@ -15,8 +15,6 @@ func Unpack(
     buf Buffer,
     dotu bool) (*Fcall, error) {
 
-    var m uint16
-
     // Enough for a header?
     if buf.ReadLeft() < 7 {
         log.Printf("buffer smaller than header?")
@@ -106,7 +104,7 @@ func Unpack(
     case Twalk:
         fc.Fid = buf.Read32()
         fc.Newfid = buf.Read32()
-        m = buf.Read16()
+        m := buf.Read16()
         fc.Wname = make([]string, m)
         for i := 0; i < int(m); i++ {
             fc.Wname[i] = buf.ReadString()
@@ -159,12 +157,12 @@ func Unpack(
         fc.Fid = buf.Read32()
 
     case Rstat:
-        fc.Fid = buf.Read32()
+        buf.Read16() // Eat size.
         gstat(buf, &fc.Dir, dotu)
 
     case Twstat:
         fc.Fid = buf.Read32()
-        m = buf.Read16()
+        buf.Read16() // Eat size.
         gstat(buf, &fc.Dir, dotu)
 
     case Rflush, Rclunk, Rremove, Rwstat:
@@ -175,7 +173,7 @@ func Unpack(
     }
 
     if buf.ReadLeft() < 0 {
-        log.Printf("buffer overrun?")
+        log.Printf("buffer overrun? -> %s", fc.String())
     }
 
     return fc, err

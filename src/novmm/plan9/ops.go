@@ -5,6 +5,7 @@
 package plan9
 
 import (
+    "math"
     "novmm/platform"
     "path"
 )
@@ -386,8 +387,35 @@ func (fs *Fs) stat(fid *Fid) (*Dir, error) {
     return fid.file.dir(path.Base(fid.Path), true)
 }
 
-func (fs *Fs) wstat(fid *Fid) error {
+func (fs *Fs) wstat(fid *Fid, dir *Dir) error {
+
+    // Grab underlying information.
+    cur, err := fs.stat(fid)
+    if err != nil {
+        return err
+    }
+
+    // FIXME: Update attributes.
+    if dir.Atime != math.MaxUint32 {
+    }
+    if dir.Mtime != math.MaxUint32 {
+    }
+    if dir.Length != math.MaxUint32 &&
+        dir.Length != cur.Length {
+    }
+    if dir.Name != "" &&
+        dir.Name != cur.Name {
+    }
+    if dir.Uidnum != math.MaxUint32 &&
+        dir.Uidnum != cur.Uidnum {
+    }
+    if dir.Gidnum != math.MaxUint32 &&
+        dir.Gidnum != cur.Gidnum {
+    }
+    if dir.Muidnum != math.MaxUint32 &&
+        dir.Muidnum != cur.Muidnum {
+    }
 
     // Not supported.
-    return nil
+    return Enotimpl
 }
