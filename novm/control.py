@@ -50,6 +50,7 @@ class Control(object):
         # Open the socket.
         fobj = self._sock.makefile(bufsize=0)
         fobj.write("NOVM RPC\n")
+        fobj.flush()
 
         # Write our command.
         # NOTE: This is currently not thread safe.
@@ -98,10 +99,14 @@ class Control(object):
         fobj.flush()
 
         try:
-            # Save our terminal attributes and
-            # enable raw mode for the terminal.
-            orig_tc_attrs = termios.tcgetattr(0)
-            tty.setraw(0)
+            try:
+                # Save our terminal attributes and
+                # enable raw mode for the terminal.
+                orig_tc_attrs = termios.tcgetattr(0)
+                tty.setraw(0)
+                is_terminal = True
+            except:
+                is_terminal = False
 
             # Remember our exitcode.
             exitcode = 1
@@ -151,12 +156,13 @@ class Control(object):
 
                     data = os.read(sys.stdin.fileno(), 4096)
 
-                    if data == "~":
-                        seen_tilde = not seen_tilde
-                    elif seen_tilde and data == ".":
-                        break
-                    elif seen_tilde:
-                        seen_tilde = False
+                    if is_terminal:
+                        if data == "~":
+                            seen_tilde = not seen_tilde
+                        elif seen_tilde and data == ".":
+                            break
+                        elif seen_tilde:
+                            seen_tilde = False
 
                     if data:
                         data = binascii.b2a_base64(data)
@@ -174,5 +180,6 @@ class Control(object):
             sys.exit(exitcode)
 
         finally:
-            # Restore all of our original terminal attributes.
-            termios.tcsetattr(0, termios.TCSAFLUSH, orig_tc_attrs)
+            if is_terminal:
+                # Restore all of our original terminal attributes.
+                termios.tcsetattr(0, termios.TCSAFLUSH, orig_tc_attrs)
