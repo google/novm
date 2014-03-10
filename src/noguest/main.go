@@ -14,7 +14,7 @@ import (
 var control = flag.String("control", "/dev/vport0p0", "control file")
 
 // Should this always run a server.
-var server = flag.Bool("server", false, "run RPC server")
+var server_fd = flag.Int("serverfd", -1, "run RPC server")
 
 func mount(fs string, location string) error {
 
@@ -38,15 +38,13 @@ func main() {
     // Parse flags.
     flag.Parse()
 
-    // Open the console.
-    console, err := os.OpenFile(*control, os.O_RDWR, 0)
-    if err != nil {
-        log.Fatal("Problem opening console:", err)
-    }
-    // Ensure this is closed on exec.
-    syscall.CloseOnExec(int(console.Fd()))
+    if *server_fd == -1 {
+        // Open the console.
+        console, err := os.OpenFile(*control, os.O_RDWR, 0)
+        if err != nil {
+            log.Fatal("Problem opening console:", err)
+        }
 
-    if !*server {
         // Make sure devpts is mounted.
         err = mount("devpts", "/dev/pts")
         if err != nil {
@@ -70,14 +68,19 @@ func main() {
         // Rerun to cleanup argv[0], or create a real init.
         new_args := make([]string, 0, len(os.Args)+1)
         new_args = append(new_args, "noguest")
-        new_args = append(new_args, "-server")
+        new_args = append(new_args, "-serverfd", "0")
         new_args = append(new_args, os.Args[1:]...)
 
         switch buffer[0] {
 
         case protocol.NoGuestCommandRealInit:
             // Run our noguest server in a new process.
-            _, err := syscall.ForkExec(os.Args[0], new_args, nil)
+            proc_attr := &syscall.ProcAttr{
+                Dir:   "/",
+                Env:   os.Environ(),
+                Files: []uintptr{console.Fd(), 1, 2},
+            }
+            _, err := syscall.ForkExec(os.Args[0], new_args, proc_attr)
             if err != nil {
                 log.Fatal(err)
             }
@@ -87,18 +90,22 @@ func main() {
             log.Fatal(err)
 
         case protocol.NoGuestCommandFakeInit:
-            // Our RPC server below will simulate init.
-            err = syscall.Exec(os.Args[0], new_args, os.Environ())
-            log.Fatal(err)
+            // Use the console as our new server fd;
+            // This will just pass into our section below.
+            *server_fd = int(console.Fd())
 
         default:
             // What the heck is this?
             log.Fatal(protocol.UnknownCommand)
         }
+    }
 
-    } else {
+    if *server_fd != -1 {
         // Small victory.
         log.Printf("~~~ NOGUEST ~~~")
+
+        // Open the console.
+        console := os.NewFile(uintptr(*server_fd), "console")
 
         // Create our RPC server.
         rpc.Run(console)
