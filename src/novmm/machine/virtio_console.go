@@ -223,7 +223,7 @@ func (console *VirtioConsoleDevice) Write(p []byte) (int, error) {
         // Map as much as needed.
         left := len(p) - n
         data := buf.Map(0, left)
-        if len(data) < left {
+        if len(data) <= left {
             copy(data, p[n:n+len(data)])
             n += len(data)
             buf.length = len(data)

@@ -6,6 +6,9 @@ import (
     "novmm/loader"
     "novmm/machine"
     "novmm/platform"
+    "os"
+    "os/signal"
+    "syscall"
 )
 
 // Our control server.
@@ -123,6 +126,9 @@ func main() {
     // Wait until we get a signal,
     // or all the VCPUs are dead.
     vcpus_alive := len(vcpus)
+    signals := make(chan os.Signal, 1)
+    signal.Notify(signals, syscall.SIGTERM)
+    signal.Notify(signals, syscall.SIGUSR1)
 
     for {
         select {
@@ -130,6 +136,13 @@ func main() {
             vcpus_alive -= 1
             if err != nil {
                 log.Printf("Vcpu died: %s", err.Error())
+            }
+        case sig := <-signals:
+            switch sig {
+            case syscall.SIGTERM:
+                os.Exit(0)
+            case syscall.SIGUSR1:
+                os.Exit(1)
             }
         }
 

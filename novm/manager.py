@@ -81,7 +81,8 @@ class NovmManager(object):
             com2=cli.BoolOpt("Enable COM2 UART?"),
             cmdline=cli.StrOpt("Extra command line options?"),
             vmmopt=cli.ListOpt("Options to pass to novmm."),
-            nofork=cli.BoolOpt("Don't fork into the background.")):
+            nofork=cli.BoolOpt("Don't fork into the background."),
+            *command):
 
         """ 
         Run a new instance.
@@ -147,12 +148,24 @@ class NovmManager(object):
                 data = r.read()
                 if not data:
                     # Closed by exec().
-                    return child
+                    # At this point we proceed, either to
+                    # run a command or to give back the pid.
+                    if command:
+                        run_cmd = [child, None, None, None]
+                        run_cmd.extend(command)
+                        return self.run(*run_cmd)
+                    else:
+                        return child
                 else:
                     # This is a pickle'd exception.
                     (exc_type, exc_value) = pickle.loads(data)
                     raise exc_value
             else:
+                # Are we running a command?
+                # Make sure this exits when we're done.
+                if command:
+                    utils.cleanup()
+
                 # Continue to create the VM.
                 # The read pipe will be closed automatically
                 # only when the new VM is actually running.
@@ -317,7 +330,7 @@ class NovmManager(object):
                 os.dup2(null_w.fileno(), 1)
                 os.dup2(null_w.fileno(), 2)
 
-            # Run our command.
+            # Execute our VMM.
             os.execv(utils.libexec("novmm"), args)
 
         except (SystemExit, KeyboardInterrupt):
