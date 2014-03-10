@@ -21,19 +21,23 @@ class Option(object):
 
 class IntOpt(Option):
     """ An integer argument. """
-    pass
+    def __int__(self):
+        return 0
 
 class StrOpt(Option):
     """ A string argument. """
-    pass
+    def __str__(self):
+        return ""
 
 class BoolOpt(Option):
     """ A simple boolean. """
-    pass
+    def truth(self):
+        return False
 
 class ListOpt(Option):
     """ Multiple specification (string). """
-    pass
+    def __len__(self):
+        return 0
 
 def main(args):
     # Create a manager.
