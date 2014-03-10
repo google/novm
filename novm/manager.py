@@ -25,6 +25,7 @@ from . import pci
 from . import cpu
 from . import control
 from . import docker
+from . import exceptions
 
 class NovmManager(object):
 
@@ -125,11 +126,11 @@ class NovmManager(object):
 
             You should specify at least username, password.
         """
-        if vcpus is None:
+        if vcpus is None or isinstance(vcpus, cli.IntOpt):
             vcpus = 1
-        if pack is None:
+        if pack is None or isinstance(pack, cli.ListOpt):
             pack = []
-        if not read:
+        if not read or isinstance(read, cli.ListOpt):
             read = ["/"]
 
         args = ["novmm"]
@@ -160,7 +161,7 @@ class NovmManager(object):
 
         try:
             # Choose the latest kernel by default.
-            if kernel is None:
+            if kernel is None or isinstance(kernel, StrOpt):
                 available_kernels = self._kernels.list()
                 if len(available_kernels) > 0:
                     kernel = available_kernels[0]
@@ -383,8 +384,10 @@ class NovmManager(object):
             *command):
 
         """ Execute a command inside a novm. """
-        if len(env) == 0:
+        if env is not None and len(env) == 0:
             env = None
+        if len(command) == 0:
+            raise exceptions.CommandInvalid()
 
         obj_id = self._instances.find(obj_id=id, name=name)
 
@@ -464,9 +467,9 @@ class NovmManager(object):
             exclude=cli.ListOpt("Subpaths to exclude."),
             include=cli.ListOpt("Subpaths to include.")):
         """ Create a pack from a tree. """
-        if output is None:
+        if output is None or isinstance(output, cli.StrOpt):
             output = tempfile.mktemp()
-        if path is None:
+        if path is None or isinstance(path, cli.StrOpt):
             if id is not None or name is not None:
                 # Is it an instance they want?
                 obj_id = self._instances.find(obj_id=id, name=name)
@@ -522,28 +525,27 @@ class NovmManager(object):
             nomodules=cli.BoolOpt("Don't include modules.")):
 
         """ Make a new kernel from an local kernel. """
-
-        if output is None:
+        if output is None or isinstance(output, cli.StrOpt):
             output = tempfile.mktemp()
 
         # Find the files for this kernel.
-        if release is None:
+        if release is None or isinstance(release, cli.StrOpt):
             release = platform.uname()[2]
-        if modules is None:
+        if modules is None or isinstance(modules, cli.StrOpt):
             modules = "/lib/modules/%s" % release
-        if bzimage is None:
+        if bzimage is None or isinstance(bzimage, cli.StrOpt):
             bzimage = "/boot/vmlinuz-%s" % release
-        if vmlinux is None:
+        if vmlinux is None or isinstance(vmlinux, cli.StrOpt):
             vmlinux_file = tempfile.NamedTemporaryFile()
             subprocess.check_call(
                 [utils.libexec("extract-vmlinux"), bzimage],
                 stdout=vmlinux_file)
             vmlinux = vmlinux_file.name
-        if setup is None:
+        if setup is None or isinstance(setup, cli.StrOpt):
             setup_file = tempfile.NamedTemporaryFile()
             setup_file.write(open(bzimage, 'rb').read(4096))
             setup = setup_file.name
-        if sysmap is None:
+        if sysmap is None or isinstance(sysmap, cli.StrOpt):
             sysmap = "/boot/System.map-%s" % release
 
         # Copy all the files into a single directory.
