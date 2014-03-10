@@ -135,7 +135,7 @@ def main(args):
         if argspec.varargs is not None:
             parser.add_argument(
                 argspec.varargs,
-                nargs='+')
+                nargs=argparse.REMAINDER)
         commands[attr] = (fn, argspec.args[1:], argspec.varargs, parser)
 
     # Build our top-level parser.
