@@ -165,7 +165,10 @@ type Vm struct {
     // Our cpuid data.
     // At the moment, we just expose the full
     // host flags to the guest.
-    cpuid []byte
+    cpuidData []byte
+
+    // The size of the vcpu mmap structs.
+    mmapSize int
 
     // Eventfds are enabled?
     use_eventfds bool
@@ -210,17 +213,7 @@ type Vcpu struct {
     resumeCond *sync.Cond
 }
 
-// The size of the mmap structure.
-var mmapSize int
-var mmapSizeOnce sync.Once
-var mmapSizeError error
-
-// Our cpuid data.
-var cpuidData []byte
-var cpuidDataOnce sync.Once
-var cpuidDataError error
-
-func getMmapSize(fd int) {
+func getMmapSize(fd int) (int, error) {
     // Get the size of the Mmap structure.
     r, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
@@ -228,16 +221,14 @@ func getMmapSize(fd int) {
         uintptr(C.GetVcpuMmapSize),
         0)
     if e != 0 {
-        mmapSize = 0
-        mmapSizeError = e
-    } else {
-        mmapSize = int(r)
+        return 0, e
     }
+    return int(r), nil
 }
 
-func getCpuidData(fd int) {
-
-    cpuidData = make([]byte, PageSize, PageSize)
+func getCpuidData(fd int) ([]byte, error) {
+    // Initialize our cpuid data.
+    cpuidData := make([]byte, PageSize, PageSize)
     cpuid := unsafe.Pointer(&cpuidData[0])
     C.cpuid_init(cpuid, PageSize)
 
@@ -247,14 +238,12 @@ func getCpuidData(fd int) {
             uintptr(fd),
             uintptr(C.GetSupportedCpuid),
             uintptr(unsafe.Pointer(&cpuidData[0])))
-
         if e == syscall.ENOMEM {
             // The nent field will now have been
             // adjusted, and we can run it again.
             continue
         } else if e != 0 {
-            cpuidDataError = e
-            break
+            return nil, e
         }
 
         // We're good!
@@ -263,6 +252,7 @@ func getCpuidData(fd int) {
 
     // Finish it off.
     C.cpuid_finish(cpuid)
+    return cpuidData, nil
 }
 
 func NewVm() (*Vm, error) {
@@ -291,15 +281,15 @@ func NewVm() (*Vm, error) {
     }
 
     // Make sure we have the mmap size.
-    mmapSizeOnce.Do(func() { getMmapSize(fd) })
-    if mmapSizeError != nil {
-        return nil, mmapSizeError
+    mmapSize, err := getMmapSize(fd)
+    if err != nil {
+        return nil, err
     }
 
     // Make sure we have cpuid data.
-    cpuidDataOnce.Do(func() { getCpuidData(fd) })
-    if cpuidDataError != nil {
-        return nil, cpuidDataError
+    cpuidData, err := getCpuidData(fd)
+    if err != nil {
+        return nil, err
     }
 
     // Create new VM.
@@ -315,8 +305,10 @@ func NewVm() (*Vm, error) {
     // Prepare our VM object.
     log.Print("kvm: VM created.")
     vm := &Vm{
-        fd:    int(vmfd),
-        vcpus: make([]*Vcpu, 0, 0),
+        fd:        int(vmfd),
+        vcpus:     make([]*Vcpu, 0, 0),
+        cpuidData: cpuidData,
+        mmapSize:  mmapSize,
     }
 
     // Try to create an IRQ chip.
@@ -382,7 +374,7 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
         syscall.SYS_IOCTL,
         uintptr(vcpufd),
         uintptr(C.SetCpuid),
-        uintptr(unsafe.Pointer(&cpuidData[0])))
+        uintptr(unsafe.Pointer(&vm.cpuidData[0])))
     if e != 0 {
         return nil, e
     }
@@ -392,7 +384,7 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     mmap, err := syscall.Mmap(
         int(vcpufd),
         0,
-        mmapSize,
+        vm.mmapSize,
         syscall.PROT_READ|syscall.PROT_WRITE,
         syscall.MAP_SHARED)
     if err != nil {
