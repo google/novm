@@ -86,7 +86,7 @@ def packdir(path, output, include=None, exclude=None):
     if exclude is None:
         exclude = ()
 
-    zipf = zipfile.ZipFile(output, 'w')
+    zipf = zipfile.ZipFile(output, 'w', allowZip64=True)
 
     for root, _, files in os.walk(path):
         for filename in files:
@@ -111,7 +111,7 @@ def packdir(path, output, include=None, exclude=None):
     return zipf
 
 def unpackdir(path, output):
-    zipf = zipfile.ZipFile(path)
+    zipf = zipfile.ZipFile(path, allowZip64=True)
     zipf.extractall(output)
 
 def libexec(name):
