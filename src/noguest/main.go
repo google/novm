@@ -94,6 +94,10 @@ func main() {
             // This will just pass into our section below.
             *server_fd = int(console.Fd())
 
+            // Since we don't have any init to setup basic
+            // things, like our hostname we do some of that here.
+            syscall.Sethostname([]byte("novm"))
+
         default:
             // What the heck is this?
             log.Fatal(protocol.UnknownCommand)
