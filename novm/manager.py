@@ -573,10 +573,15 @@ class NovmManager(object):
             shutil.copy(vmlinux, os.path.join(temp_dir, "vmlinux"))
             shutil.copy(sysmap, os.path.join(temp_dir, "sysmap"))
             shutil.copy(setup, os.path.join(temp_dir, "setup"))
+
             if nomodules:
                 os.makedirs(os.path.join(temp_dir, "modules"))
             else:
-                shutil.copytree(modules, os.path.join(temp_dir, "modules"))
+                shutil.copytree(
+                    modules,
+                    os.path.join(temp_dir, "modules"),
+                    ignore=shutil.ignore_patterns("source", "build"))
+
             open(os.path.join(temp_dir, "release"), "w").write(release)
             utils.packdir(temp_dir, output)
             return "file://%s" % os.path.abspath(output)
