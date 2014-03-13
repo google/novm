@@ -99,13 +99,14 @@ class Nic(virtio.Device):
         # Enslave to the given bridge.
         # (It will automatically be removed.)
         if bridge is not None:
-            subprocess.call(
+            subprocess.check_call(
                 ["brctl", "addif", bridge, tapname],
                 close_fds=True)
 
         # Make sure the interface is up.
         subprocess.check_call(
-            ["ip", "link", "set", "up", "dev", tapname])
+            ["ip", "link", "set", "up", "dev", tapname],
+            close_fds=True)
 
         # Start our dnsmasq.
         # This is just a simple responded for
@@ -130,7 +131,10 @@ class Nic(virtio.Device):
             subprocess.Popen(
                 dnsmasq_opts,
                 preexec_fn=utils.cleanup,
-                close_fds=True)
+                close_fds=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
             self._ip = address
         else:
             self._ip = None
