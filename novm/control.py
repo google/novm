@@ -135,7 +135,7 @@ class Control(object):
                     if not started:
                         # See note abouve started.
                         if obj is not None:
-                            raise Exception(obj)
+                            raise Exception("%s: %s" % (obj, command))
                         started = True
                         continue
 
