@@ -1,0 +1,55 @@
+#!/bin/bash
+#
+# This script can be used as a docker backend.
+# It is currently a proof-of-concept, based on the
+# docker pull request #4626:
+#   https://github.com/dotcloud/docker/pull/4626
+# You should start docker using:
+#   docker -d -e shell -o novm-docker
+#
+
+set -e
+
+# Override our root, since when we are run by docker
+# in the directory where we are expected to store data.
+export NOVM_ROOT=$PWD/novm
+
+usage() {
+    echo "usage: $0 <init|start> [command...]"
+    echo "note: start requires the following environment:"
+    echo "   DOCKER_ID"
+    echo "   DOCKER_ROOTFS"
+    echo "   DOCKER_BRIDGE"
+    echo "   DOCKER_MTU"
+    exit 1
+}
+
+[ "$#" -lt "1" ] && usage
+command=$1
+shift
+
+case "$command" in
+    init)
+        kernel_count=$(novm --plain kernels | wc -l)
+        [ "$kernel_count" -gt "0" ] || novm-import-kernel
+        exit 0
+        ;;
+
+    start)
+        [ "$#" -eq "0" ] && usage
+        [ -z "$DOCKER_ID" ] && usage
+        [ -z "$DOCKER_ROOTFS" ] && usage
+        [ -z "$DOCKER_BRIDGE" ] && usage
+        [ -z "$DOCKER_MTU" ] && usage
+
+        exec novm create \
+            --read "/=>$DOCKER_ROOTFS" \
+            --write "/=>$DOCKER_ROOTFS" \
+            --nic "bridge=$DOCKER_BRIDGE,mtu=$DOCKER_MTU" \
+            "$@"
+        ;;
+
+    *)
+        usage
+        ;;
+esac
