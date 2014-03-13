@@ -93,19 +93,19 @@ class Nic(virtio.Device):
         self._tap = tap_device(tapname)
         if mtu is not None:
             subprocess.check_call(
-                ["ip", "link", "set", "dev", tapname, "mtu", str(mtu)],
+                ["/sbin/ip", "link", "set", "dev", tapname, "mtu", str(mtu)],
                 close_fds=True)
 
         # Enslave to the given bridge.
         # (It will automatically be removed.)
         if bridge is not None:
             subprocess.check_call(
-                ["brctl", "addif", bridge, tapname],
+                ["/sbin/brctl", "addif", bridge, tapname],
                 close_fds=True)
 
         # Make sure the interface is up.
         subprocess.check_call(
-            ["ip", "link", "set", "up", "dev", tapname],
+            ["/sbin/ip", "link", "set", "up", "dev", tapname],
             close_fds=True)
 
         # Start our dnsmasq.
@@ -114,7 +114,7 @@ class Nic(virtio.Device):
         # whenever the underlying instance dies.
         if ip is not None:
             (address, start, end) = parse_ipv4mask(ip)
-            dnsmasq_opts = ["dnsmasq"]
+            dnsmasq_opts = ["/usr/sbin/dnsmasq"]
             dnsmasq_opts.append("--keep-in-foreground")
             dnsmasq_opts.append("--no-daemon")
             dnsmasq_opts.append("--conf-file=")
