@@ -77,7 +77,7 @@ class Control(object):
 
         return obj.get("result")
 
-    def run(self, command, env=None, cwd=None):
+    def run(self, command, env=None, cwd=None, terminal=False):
         if env is None:
             env = ["%s=%s" % (k,v) for (k,v) in os.environ.items()]
         if cwd is None:
@@ -102,9 +102,12 @@ class Control(object):
             try:
                 # Save our terminal attributes and
                 # enable raw mode for the terminal.
-                orig_tc_attrs = termios.tcgetattr(0)
-                tty.setraw(0)
-                is_terminal = True
+                if terminal:
+                    orig_tc_attrs = termios.tcgetattr(0)
+                    tty.setraw(0)
+                    is_terminal = True
+                else:
+                    is_terminal = False
             except:
                 is_terminal = False
 

@@ -83,6 +83,7 @@ class NovmManager(object):
             cmdline=cli.StrOpt("Extra command line options?"),
             vmmopt=cli.ListOpt("Options to pass to novmm."),
             nofork=cli.BoolOpt("Don't fork into the background."),
+            terminal=cli.BoolOpt("Change the terminal mode."),
             *command):
 
         """ 
@@ -152,7 +153,7 @@ class NovmManager(object):
                     # At this point we proceed, either to
                     # run a command or to give back the pid.
                     if command:
-                        run_cmd = [child, None, None, None]
+                        run_cmd = [child, None, None, None, terminal]
                         run_cmd.extend(command)
                         return self.run(*run_cmd)
                     else:
@@ -396,6 +397,7 @@ class NovmManager(object):
             name=cli.StrOpt("The instance name."),
             env=cli.ListOpt("Specify an environment variable."),
             cwd=cli.StrOpt("The process working directory."),
+            terminal=cli.BoolOpt("Change the terminal mode."),
             *command):
 
         """ Execute a command inside a novm. """
@@ -409,7 +411,7 @@ class NovmManager(object):
         ctrl_path = os.path.join(self._controls, "%s.ctrl" % obj_id)
         ctrl = control.Control(ctrl_path, bind=False)
 
-        return ctrl.run(command, env=env, cwd=cwd)
+        return ctrl.run(command, env=env, cwd=cwd, terminal=terminal)
 
     def _is_alive(self, pid):
         """ Is this process still around? """
