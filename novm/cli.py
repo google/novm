@@ -190,6 +190,8 @@ def main(args):
         else:
             sys.stderr.write("error: %s\n" % str(e))
         sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(2)
 
     # Print the result.
     if top_args.json:
