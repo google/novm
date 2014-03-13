@@ -69,6 +69,7 @@ class Nic(virtio.Device):
             bridge=None,
             ip=None,
             gateway=None,
+            mtu=None,
             **kwargs):
 
         super(Nic, self).__init__(index=index, **kwargs)
@@ -85,10 +86,15 @@ class Nic(virtio.Device):
             "bridge": bridge,
             "ip": ip,
             "gateway": gateway,
+            "mtu": mtu,
         }
 
         # Create our new tap device.
         self._tap = tap_device(tapname)
+        if mtu is not None:
+            subprocess.check_call(
+                ["ip", "link", "set", "dev", tapname, "mtu", str(mtu)],
+                close_fds=True)
 
         # Enslave to the given bridge.
         # (It will automatically be removed.)
