@@ -10,6 +10,7 @@ import tempfile
 import shutil
 import fcntl
 import pickle
+import tempfile
 
 from . import utils
 from . import db
@@ -34,7 +35,7 @@ class NovmManager(object):
             self._root = os.getenv(
                 "NOVM_ROOT",
                 os.path.join(
-                    os.environ["HOME"],
+                    os.getenv("HOME", tempfile.gettempdir()),
                     ".novm"))
 
         self._instances = db.Nodb(
