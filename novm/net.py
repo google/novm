@@ -10,6 +10,25 @@ import subprocess
 from . import utils
 from . import device
 from . import virtio
+from . import ioctl
+
+# Tap device flags.
+IFF_TAP      = 0x0002
+IFF_NO_PI    = 0x1000
+IFF_VNET_HDR = 0x4000
+
+# Tap device offloads.
+TUN_F_CSUM    = 0x01
+TUN_F_TSO4    = 0x02
+TUN_F_TSO6    = 0x04
+TUN_F_TSO_ECN = 0x08
+TUN_F_UFO     = 0x10
+
+# Tap device ioctls.
+TUNSETIFF       = ioctl._IOW(ord('T'), 202, 4)
+TUNGETFEATURES  = ioctl._IOR(ord('T'), 207, 4)
+TUNSETOFFLOAD   = ioctl._IOW(ord('T'), 208, 4)
+TUNGETVNETHDRSZ = ioctl._IOR(ord('T'), 215, 4)
 
 def random_mac(oui="28:48:46"):
     """ Return a random MAC address. """
@@ -50,10 +69,45 @@ def parse_ipv4mask(ip):
 def tap_device(name):
     """ Create a tap device. """
     tap = open('/dev/net/tun', 'r+b')
-    # Flags are IFF_TAP|IFF_NO_PI.
-    ifr = struct.pack('16sH', name, 0x1002)
-    fcntl.ioctl(tap, 0x400454ca, ifr)
-    return tap
+
+    # Figure out if the kernel supports processing vnet headers on tap
+    # devices. This is necessary for forwarding hardware offloading
+    # from the guest virtual nics to the physical nics on the host.
+    features_raw = fcntl.ioctl(tap, TUNGETFEATURES, struct.pack('I', 0))
+    features = struct.unpack('I', features_raw)[0]
+
+    flags = IFF_TAP | IFF_NO_PI
+    if features & IFF_VNET_HDR:
+        flags |= IFF_VNET_HDR
+        strip_vnet_hdr = False
+    else:
+        strip_vnet_hdr = True
+
+    # Create the tap device.
+    ifr = struct.pack('16sH', name, flags)
+    fcntl.ioctl(tap, TUNSETIFF, ifr)
+
+    vnet_hdr_sz_raw = fcntl.ioctl(tap, TUNGETVNETHDRSZ, struct.pack('I', 0))
+    vnet_hdr_sz = struct.unpack('i', vnet_hdr_sz_raw)[0]
+
+    # Size of the vnet header expected by the tap device.
+    vnet = 0 if strip_vnet_hdr else vnet_hdr_sz
+
+    # Enable hardware offloads.
+    if vnet:
+        try:
+            fcntl.ioctl(tap, TUNSETOFFLOAD,
+                        TUN_F_CSUM | TUN_F_TSO4 |
+                        TUN_F_TSO6 | TUN_F_TSO_ECN | TUN_F_UFO)
+            offload = True
+        except Exception as ex:
+            print "Failed to enable offloads:", ex
+            offload = False
+    else:
+        # Can't support offloads without vnet header.
+        offload = False
+
+    return tap, vnet, offload
 
 class Nic(virtio.Device):
 
@@ -90,7 +144,7 @@ class Nic(virtio.Device):
         }
 
         # Create our new tap device.
-        self._tap = tap_device(tapname)
+        self._tap, self._vnet, self._offload = tap_device(tapname)
         if mtu is not None:
             subprocess.check_call(
                 ["/sbin/ip", "link", "set", "dev", tapname, "mtu", str(mtu)],
@@ -143,6 +197,8 @@ class Nic(virtio.Device):
         return {
             "mac": self._info["mac"],
             "fd": self._tap.fileno(),
+            "vnet" : self._vnet,
+            "offload" : self._offload,
         }
 
     def ip(self):

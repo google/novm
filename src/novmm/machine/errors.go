@@ -31,6 +31,7 @@ func DriverUnknown(name string) error {
 
 // Virtio errors.
 var VirtioInvalidQueueSize = errors.New("Invalid VirtIO queue size!")
+var VirtioUnsupportedVnetHeader = errors.New("Unsupported vnet header size.")
 
 // I/O memoize errors.
 // This is an internal-only error which is returned from
