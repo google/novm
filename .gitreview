@@ -1,0 +1,5 @@
+[gerrit]
+host=reviews.gridcentric.ca
+port=29418
+project=novm
+defaultbranch=master
