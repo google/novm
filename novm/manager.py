@@ -159,7 +159,10 @@ class NovmManager(object):
                 else:
                     # This is a pickle'd exception.
                     (exc_type, exc_value) = pickle.loads(data)
-                    raise exc_value
+                    while True:
+                        (pid, status) = os.waitpid(child, 0)
+                        if pid == child and os.WIFEXITED(status):
+                            raise exc_value
             else:
                 # Are we running a command?
                 # Make sure this exits when we're done.
@@ -341,11 +344,9 @@ class NovmManager(object):
                 w = os.fdopen(w_pipe, 'w')
                 pickle.dump(sys.exc_info()[:2], w)
                 w.close()
-                sys.exit(1)
-            else:
-                # Raise in the main thread.
-                exc_info = sys.exc_info()
-                raise exc_info[0], exc_info[1], exc_info[2]
+            # Raise in the main thread.
+            exc_info = sys.exc_info()
+            raise exc_info[0], exc_info[1], exc_info[2]
 
     def control(self,
             id=cli.StrOpt("The instance id."),
