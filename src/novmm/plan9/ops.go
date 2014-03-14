@@ -293,7 +293,7 @@ func (fs *Fs) readFile(
     // special case in the main fs loop.
 
     // Lock the file for reading.
-    err := fid.file.lockRead(offset, length)
+    err := fid.file.lockRead(fs, offset, length)
     return fid.file.read_fd, err
 }
 
@@ -332,7 +332,7 @@ func (fs *Fs) writeFile(
     offset int64,
     count int) (int, error) {
 
-    err := fid.file.lockWrite(offset, count)
+    err := fid.file.lockWrite(fs, offset, count)
     return fid.file.write_fd, err
 }
 

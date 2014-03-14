@@ -13,6 +13,7 @@ import (
     "sync"
     "sync/atomic"
     "syscall"
+    "time"
 )
 
 type File struct {
@@ -32,6 +33,16 @@ type File struct {
 
     // Our underlying mode.
     mode uint32
+
+    // Our access timestamp (for LRU).
+    // This is internal and used for LRU,
+    // it is not the atime or mtime on the
+    // underlying file -- which is directly
+    // from the underlying filesystem.
+    used time.Time
+
+    // Our index in the LRU.
+    index int
 
     // The associated file fds.
     read_fd  int
@@ -191,14 +202,14 @@ func (fs *Fs) lookup(path string) (*File, error) {
         path = path[:len(path)-1]
     }
 
-    fs.fileLock.RLock()
+    fs.filesLock.RLock()
     file, ok := fs.files[path]
     if ok {
         atomic.AddInt32(&file.refs, 1)
-        fs.fileLock.RUnlock()
+        fs.filesLock.RUnlock()
         return file, nil
     }
-    fs.fileLock.RUnlock()
+    fs.filesLock.RUnlock()
 
     // Create our new file object.
     // This isn't in the hotpath, so we
@@ -206,25 +217,144 @@ func (fs *Fs) lookup(path string) (*File, error) {
     newfile, err := fs.NewFile(path)
 
     // Escalate and create if necessary.
-    fs.fileLock.Lock()
+    fs.filesLock.Lock()
     file, ok = fs.files[path]
     if ok {
         // Race caught.
         newfile.DecRef(fs, path)
         atomic.AddInt32(&file.refs, 1)
-        fs.fileLock.Unlock()
+        fs.filesLock.Unlock()
         return file, nil
     }
 
     if err != nil {
-        fs.fileLock.Unlock()
+        fs.filesLock.Unlock()
         return nil, err
     }
 
+    // Add the file.
+    // NOTE: We add the file synchronously to the
+    // LRU currently because otherwise race conditions
+    // related to removing the file become very complex.
     fs.files[path] = newfile
-    fs.fileLock.Unlock()
+    fs.filesLock.Unlock()
 
     return newfile, nil
+}
+
+func (fs *Fs) swapLru(i1 int, i2 int) {
+    older_file := fs.lru[i1]
+
+    fs.lru[i1] = fs.lru[i2]
+    fs.lru[i1].index = i1
+
+    fs.lru[i2] = older_file
+    fs.lru[i2].index = i2
+}
+
+func (fs *Fs) removeLru(file *File, lock bool) {
+
+    // This function will be called as an
+    // independent goroutine in order to remove
+    // a specific file (for example, on close)
+    // or it will be called as a subroutine from
+    // updateLru -- which is itself an synchronous
+    // update function.
+
+    if lock {
+        fs.lruLock.Lock()
+        defer fs.lruLock.Unlock()
+    }
+
+    // Shutdown all descriptors.
+    file.flush()
+
+    // Remove from our LRU.
+    if file.index != -1 {
+        if file.index == len(fs.lru)-1 {
+            // Just truncate.
+            fs.lru = fs.lru[0 : len(fs.lru)-1]
+        } else {
+            // Swap and run a bubble.
+            // This may end up recursing.
+            other_file := fs.lru[len(fs.lru)-1]
+            fs.swapLru(file.index, len(fs.lru)-1)
+            fs.lru = fs.lru[0 : len(fs.lru)-1]
+            fs.updateLru(other_file, false)
+        }
+    }
+}
+
+func (fs *Fs) updateLru(file *File, lock bool) {
+
+    if lock {
+        fs.lruLock.Lock()
+        defer fs.lruLock.Unlock()
+
+        file.used = time.Now()
+
+        if file.index == -1 {
+            fs.lru = append(fs.lru, file)
+            file.index = len(fs.lru) - 1
+        }
+    }
+
+    // Not in the LRU?
+    // This may be a stale update goroutine.
+    if file.index == -1 {
+        return
+    }
+
+    // Bubble up.
+    index := file.index
+    for index != 0 {
+        if file.used.Before(fs.lru[index/2].used) {
+            fs.swapLru(index, index/2)
+            index = index / 2
+            continue
+        }
+        break
+    }
+
+    // Bubble down.
+    for index*2 < len(fs.lru) {
+        if file.used.After(fs.lru[index*2].used) {
+            fs.swapLru(index, index*2)
+            index = index * 2
+            continue
+        }
+        if index*2+1 < len(fs.lru) && file.used.After(fs.lru[index*2+1].used) {
+            fs.swapLru(index, index*2+1)
+            index = index*2 + 1
+            continue
+        }
+        break
+    }
+
+    fs.flushLru()
+}
+
+func (fs *Fs) touchLru(file *File) {
+    if file.index == -1 {
+        // This needs to be done synchronously,
+        // to ensure that this file is in the LRU
+        // because we may have a remove() event.
+        fs.updateLru(file, true)
+    } else {
+        // We can do this update asynchronously.
+        go fs.updateLru(file, true)
+    }
+}
+
+func (fs *Fs) flushLru() {
+    // Are we over our limit?
+    // Schedule a removal. Note that this will end
+    // up recursing through updateLru() again, and
+    // may end up calling flushLru() again. So we
+    // don't need to check bounds, only one call.
+    if len(fs.lru) > int(fs.Fdlimit) {
+        fs.removeLru(fs.lru[0], false)
+    }
 }
 
 func (file *File) unlink() error {
@@ -396,7 +526,7 @@ func (file *File) create(
         }
 
         file.RWMutex.Unlock()
-        err = file.lockWrite(0, 0)
+        err = file.lockWrite(fs, 0, 0)
         if err != nil {
             return err
         }
@@ -418,11 +548,13 @@ func (file *File) create(
 }
 
 func (file *File) lockWrite(
+    fs *Fs,
     offset int64,
     length int) error {
 
     file.RWMutex.RLock()
     if file.write_fd != -1 {
+        fs.touchLru(file)
         return nil
     }
 
@@ -432,7 +564,7 @@ func (file *File) lockWrite(
     if file.write_fd != -1 {
         // Race caught.
         file.RWMutex.Unlock()
-        return file.lockWrite(offset, length)
+        return file.lockWrite(fs, offset, length)
     }
 
     mode := syscall.O_RDWR
@@ -497,15 +629,17 @@ func (file *File) lockWrite(
 
     // Retry (for the RLock).
     file.RWMutex.Unlock()
-    return file.lockWrite(offset, length)
+    return file.lockWrite(fs, offset, length)
 }
 
 func (file *File) lockRead(
+    fs *Fs,
     offset int64,
     length int) error {
 
     file.RWMutex.RLock()
     if file.read_fd != -1 {
+        fs.touchLru(file)
         return nil
     }
 
@@ -515,14 +649,14 @@ func (file *File) lockRead(
     if file.read_fd != -1 {
         // Race caught.
         file.RWMutex.Unlock()
-        return file.lockRead(offset, length)
+        return file.lockRead(fs, offset, length)
     }
     if file.write_fd != -1 {
         // Use the same Fd.
         // The close logic handles this.
         file.read_fd = file.write_fd
         file.RWMutex.Unlock()
-        return file.lockRead(offset, length)
+        return file.lockRead(fs, offset, length)
     }
 
     // Okay, no write available.
@@ -538,7 +672,27 @@ func (file *File) lockRead(
 
     // Retry (for the RLock).
     file.RWMutex.Unlock()
-    return file.lockRead(offset, length)
+    return file.lockRead(fs, offset, length)
+}
+
+func (file *File) flush() {
+    file.RWMutex.Lock()
+    defer file.RWMutex.Unlock()
+
+    // Close the file if still opened.
+    if file.read_fd != -1 {
+        syscall.Close(file.read_fd)
+    }
+
+    // Close the write_fd if it's open
+    // (and it's unique).
+    if file.write_fd != -1 &&
+        file.write_fd != file.read_fd {
+        syscall.Close(file.write_fd)
+    }
+
+    file.read_fd = -1
+    file.write_fd = -1
 }
 
 func (file *File) dir(
@@ -669,9 +823,9 @@ func (file *File) unlock() {
 }
 
 func (file *File) IncRef(fs *Fs) {
-    fs.fileLock.RLock()
+    fs.filesLock.RLock()
     atomic.AddInt32(&file.refs, 1)
-    fs.fileLock.RUnlock()
+    fs.filesLock.RUnlock()
 }
 
 func (file *File) DecRef(fs *Fs, path string) {
@@ -679,28 +833,21 @@ func (file *File) DecRef(fs *Fs, path string) {
     new_refs := atomic.AddInt32(&file.refs, -1)
 
     if new_refs == 0 {
-        fs.fileLock.Lock()
+        fs.filesLock.Lock()
         if file.refs != 0 {
             // Race condition caught.
-            fs.fileLock.Unlock()
+            fs.filesLock.Unlock()
             return
         }
 
         // Remove this file.
         delete(fs.files, path)
-        fs.fileLock.Unlock()
+        fs.filesLock.Unlock()
 
-        // Close the file if still opened.
-        if file.read_fd != -1 {
-            syscall.Close(file.read_fd)
-        }
-
-        // Close the write_fd if it's open
-        // (and it's unique).
-        if file.write_fd != -1 &&
-            file.write_fd != file.read_fd {
-            syscall.Close(file.write_fd)
-        }
+        // Ensure that file is removed from the LRU.
+        // This will be done asynchronously, and as a
+        // result all file descriptors will be closed.
+        go fs.removeLru(file, true)
     }
 }
 
@@ -724,6 +871,9 @@ func (fs *Fs) NewFile(path string) (*File, error) {
 
     // Figure out the paths.
     file.findPaths(fs, path)
+
+    // Clear our LRU index.
+    file.index = -1
 
     // Reset our FDs.
     file.read_fd = -1

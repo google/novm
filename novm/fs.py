@@ -21,6 +21,7 @@ class FS(virtio.Device):
             tempdir=None,
             read=None,
             write=None,
+            fdlimit=None,
             **kwargs):
 
         super(FS, self).__init__(**kwargs)
@@ -61,9 +62,15 @@ class FS(virtio.Device):
             else:
                 self._write[spec[0]] = spec[1]
 
+        # Save our fdlimit.
+        # By default 0 means it will use half
+        # the process fdlimit (as reported by rlimit).
+        self._fdlimit = fdlimit or 0
+
     def data(self):
         return {
             "read": self._read,
             "write": self._write,
             "tag": self._tag,
+            "fdlimit": self._fdlimit,
         }

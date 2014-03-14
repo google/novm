@@ -35,13 +35,23 @@ type Fs struct {
     files map[string]*File
 
     // Lock protecting the above.
-    fileLock sync.RWMutex
+    filesLock sync.RWMutex
+
+    // Our file map priority queue,
+    // used for closing unused file descriptors.
+    lru []*File
+
+    // Lock protecting the above.
+    lruLock sync.Mutex
 
     // Our file root.
     root *File
 
     // Our next fileid.
     Fileid uint64 `json:"fileid"`
+
+    // Our file descriptor limits.
+    Fdlimit uint `json:"fdlimit"`
 }
 
 func (fs *Fs) error(buf Buffer, tag uint16, err error) error {
@@ -353,7 +363,7 @@ done:
 
     if debug {
         fs.fidLock.Lock()
-        fs.fileLock.Lock()
+        fs.filesLock.Lock()
         for fidno, fid := range fs.Fidpool {
             log.Printf(
                 "  fidno %x: %d refs (%s)",
@@ -365,7 +375,7 @@ done:
                 file.Qid.Path, path, file.refs)
         }
         fs.fidLock.Unlock()
-        fs.fileLock.Unlock()
+        fs.filesLock.Unlock()
     }
 
     // All good.
@@ -380,6 +390,24 @@ func (fs *Fs) Init() error {
     fs.Reqs = make(map[uint16]bool)
     fs.fidCond = sync.NewCond(&fs.fidLock)
     fs.files = make(map[string]*File)
+    fs.lru = make([]*File, 0, 0)
+
+    if fs.Fdlimit == 0 {
+        // Figure out our active limit (1/2 open limit).
+        // We use 1/2 because control connections, tap devices,
+        // disks, etc. all need file descriptors. Note that we
+        // also explicitly handle running out of file descriptors,
+        // but this gives us an open bound to leave room for the
+        // rest of the system (because pieces don't always handle
+        // an EMFILE or ENFILE appropriately).
+        var rlim syscall.Rlimit
+        err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim)
+        if err != nil {
+            return err
+        }
+        fs.Fdlimit = uint(rlim.Cur) / 2
+    }
+
     return nil
 }
 
