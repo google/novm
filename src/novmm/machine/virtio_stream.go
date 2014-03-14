@@ -181,8 +181,13 @@ func (stream *VirtioStream) WriteBytes(data []byte) {
     }
 
     // Copy the prefix.
-    copy(ram, data[:len(ram)])
-    stream.write_offset += len(ram)
+    if len(ram) > len(data) {
+        copy(ram, data)
+        stream.write_offset += len(data)
+    } else {
+        copy(ram, data[:len(ram)])
+        stream.write_offset += len(ram)
+    }
 
     // Copy the suffix.
     if len(ram) < len(data) {
