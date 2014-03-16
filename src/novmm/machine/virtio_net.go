@@ -1,6 +1,8 @@
 package machine
 
 import (
+    "crypto/rand"
+    "net"
     "novmm/platform"
 )
 
@@ -9,12 +11,36 @@ import (
 //
 const (
     VirtioNetFCsum     uint32 = 1 << 0
+    VirtioNetFMac             = 1 << 5
     VirtioNetFHostTso4        = 1 << 11
     VirtioNetFHostTso6        = 1 << 12
     VirtioNetFHostEcn         = 1 << 13
     VirtioNetFHostUfo         = 1 << 14
+    VirtioNetFStatus          = 1 << 16
 )
 
+//
+// VirtioNet Status Bits
+//
+const (
+    VirtioNetLinkUp   = (1 << 0)
+    VirtioNetAnnounce = (1 << 1)
+)
+
+//
+// VirtioNet Config Space
+//
+const (
+    VirtioNetMacOffset    = 0
+    VirtioNetMacLen       = 6
+    VirtioNetStatusOffset = (VirtioNetMacOffset + VirtioNetMacLen)
+    VirtioNetStatusLen    = 2
+    VirtioNetConfigLen    = (VirtioNetMacLen + VirtioNetStatusLen)
+)
+
+//
+// VirtioNet VLAN support
+//
 const (
     VirtioNetHeaderSize = 10
 )
@@ -82,25 +108,57 @@ func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 
-func (net *VirtioNetDevice) Attach(vm *platform.Vm, model *Model) error {
-    if net.Vnet != 0 && net.Vnet != VirtioNetHeaderSize {
+func (nic *VirtioNetDevice) Attach(vm *platform.Vm, model *Model) error {
+    if nic.Vnet != 0 && nic.Vnet != VirtioNetHeaderSize {
         return VirtioUnsupportedVnetHeader
     }
 
-    if net.Vnet > 0 && net.Offload {
-        net.Debug("hw offloads available, exposing features to guest.")
-        net.SetFeatures(VirtioNetFCsum | VirtioNetFHostTso4 | VirtioNetFHostTso6 |
+    if nic.Vnet > 0 && nic.Offload {
+        nic.Debug("hw offloads available, exposing features to guest.")
+        nic.SetFeatures(VirtioNetFCsum | VirtioNetFHostTso4 | VirtioNetFHostTso6 |
             VirtioNetFHostEcn | VirtioNetFHostUfo)
     }
 
-    err := net.VirtioDevice.Attach(vm, model)
+    // Set up our Config space.
+    nic.Config.GrowTo(VirtioNetConfigLen)
+
+    // Add MAC, if specified. If unspecified or bad
+    // autogenerate.
+    var mac net.HardwareAddr
+    if nic.Mac != "" {
+        var err error
+        mac, err = net.ParseMAC(nic.Mac)
+        if err != nil {
+            return err
+        }
+    } else {
+        // Random MAC with Gridcentric's OUI.
+        mac = make([]byte, 6)
+        rand.Read(mac[3:])
+        mac[0] = 0x28
+        mac[1] = 0x48
+        mac[2] = 0x46
+    }
+    nic.SetFeatures(VirtioNetFMac)
+    for i := 0; i < len(mac); i += 1 {
+        nic.Config.Set8(VirtioNetMacOffset+i, mac[i])
+    }
+
+    // Add status bits. In the future we should
+    // be polling the underlying physical/tap device
+    // for link-up and announce status. For now,
+    // just emulate the status-less "always up" behavior.
+    nic.SetFeatures(VirtioNetFStatus)
+    nic.Config.Set16(VirtioNetStatusOffset, VirtioNetLinkUp)
+
+    err := nic.VirtioDevice.Attach(vm, model)
     if err != nil {
         return err
     }
 
     // Start our network process.
-    go net.processPackets(net.Channels[0], true)
-    go net.processPackets(net.Channels[1], false)
+    go nic.processPackets(nic.Channels[0], true)
+    go nic.processPackets(nic.Channels[1], false)
 
     return nil
 }
