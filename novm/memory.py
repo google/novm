@@ -14,7 +14,7 @@ class UserMemory(device.Device):
             self,
             size=None,
             fd=None,
-            **kwargs): 
+            **kwargs):
 
         super(UserMemory, self).__init__(**kwargs)
 

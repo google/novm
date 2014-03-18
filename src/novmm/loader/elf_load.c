@@ -4,7 +4,7 @@
  * Implementation of a simple linux loader.
  *
  * Note that this is only part of the implementation,
- * I've managed to keep most of the bit twiddling in 
+ * I've managed to keep most of the bit twiddling in
  * go itself -- this is simply easier because of the
  * direct access to the ELF type definitions.
  */

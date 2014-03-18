@@ -25,7 +25,7 @@ def parse_ipv4mask(ip):
     We also return the associated gateway
     and broadcast address for the subnet.
     """
-    (address, mask) = ip.split("/", 1) 
+    (address, mask) = ip.split("/", 1)
     # Compute the relevant masks.
     parts = [int(part) for part in address.split(".")]
     addr = sum([parts[i]<<(24-i*8) for i in range(len(parts))])

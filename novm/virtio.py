@@ -18,7 +18,7 @@ class Device(device.Device):
 
         # Are we an MMIO device?
         # NOTE: We arbitrarily pick 0xeXXXXXXX as the
-        # start for all of our virtio devices. If we 
+        # start for all of our virtio devices. If we
         # have to do anymore reservation for I/O devices,
         # we might want to consider implemented something
         # a bit more thorough here.

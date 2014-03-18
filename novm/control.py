@@ -61,7 +61,7 @@ class Control(object):
         rpc_uuid = str(uuid.uuid4())
         rpc_cmd = {
             "method": "Control.%s" % name.title(),
-            "params": [kwargs], 
+            "params": [kwargs],
             "id": rpc_uuid,
         }
         json.dump(rpc_cmd, fobj)

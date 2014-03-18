@@ -159,7 +159,7 @@ def main(args):
         default=False,
         dest="plain",
         help="Print result as plain text.")
-    top_parser.add_argument("--json", 
+    top_parser.add_argument("--json",
         action="store_true",
         default=False,
         dest="json",

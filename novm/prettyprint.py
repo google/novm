@@ -10,7 +10,7 @@ def prettyprint(value, output):
         # Print nothing.
         pass
 
-    elif (isinstance(value, types.ListType) or 
+    elif (isinstance(value, types.ListType) or
         isinstance(value, types.DictType)):
 
         if len(value) == 0:
@@ -99,7 +99,7 @@ def plainprint(value, output):
         # Print nothing.
         pass
 
-    elif (isinstance(value, types.ListType) or 
+    elif (isinstance(value, types.ListType) or
         isinstance(value, types.DictType)):
         # Print individual values.
         for subvalue in value:

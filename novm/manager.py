@@ -86,7 +86,7 @@ class NovmManager(object):
             terminal=cli.BoolOpt("Change the terminal mode."),
             *command):
 
-        """ 
+        """
         Run a new instance.
 
         Network definitions are provided as --nic [opt=val],...
