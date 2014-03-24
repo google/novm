@@ -9,6 +9,9 @@ import thread
 import zipfile
 import traceback
 
+def squash_signal(*args):
+    pass
+
 def raise_exception(*args):
     thread.exit()
 
@@ -38,7 +41,7 @@ def cleanup(fcn=None, *args, **kwargs):
         # We don't have multiple threads here, so we're
         # guaranteed that this will be handled in this frame.
         if fcn is not None:
-            signal.signal(signal.SIGINT, raise_exception)
+            signal.signal(signal.SIGINT, squash_signal)
             signal.signal(signal.SIGTERM, raise_exception)
 
         # Set P_SETSIGDEATH to SIGTERM.
