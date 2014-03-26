@@ -22,13 +22,25 @@ func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
         *ok = false
         return syscall.EINVAL
     }
+
+    // Grab our specific vcpu.
     vcpu := vcpus[settings.Id]
+
+    // Ensure steping is as expected.
     err := vcpu.SetStepping(settings.Step)
-    if settings.Paused {
-        vcpu.Pause()
-    } else {
-        vcpu.Unpause()
+    if err != nil {
+        *ok = false
+        return err
     }
+
+    // Ensure that the vcpu is paused/unpaused.
+    if settings.Paused {
+        err = vcpu.Pause(true)
+    } else {
+        err = vcpu.Unpause(true)
+    }
+
+    // Done.
     *ok = (err == nil)
     return err
 }

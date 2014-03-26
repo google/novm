@@ -123,12 +123,10 @@ func main() {
     control := NewControl(*control_fd, *real_init, model, vm, tracer, proxy)
     go control.serve()
 
-    // Wait until we get a signal,
-    // or all the VCPUs are dead.
+    // Wait until we get a TERM signal, or all the VCPUs are dead.
     vcpus_alive := len(vcpus)
     signals := make(chan os.Signal, 1)
     signal.Notify(signals, syscall.SIGTERM)
-    signal.Notify(signals, syscall.SIGUSR1)
 
     for {
         select {
@@ -141,8 +139,6 @@ func main() {
             switch sig {
             case syscall.SIGTERM:
                 os.Exit(0)
-            case syscall.SIGUSR1:
-                os.Exit(1)
             }
         }
 

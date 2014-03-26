@@ -7,7 +7,6 @@ package platform
 #include <string.h>
 
 // VCPU Ioctls.
-const int Run = KVM_RUN;
 const int GetRegs = KVM_GET_REGS;
 const int SetRegs = KVM_SET_REGS;
 const int GetSRegs = KVM_GET_SREGS;
@@ -115,46 +114,6 @@ func (vm *Vm) LApic() Paddr {
 func (vm *Vm) IOApic() Paddr {
     // This is the default.
     return Paddr(0xfec00000)
-}
-
-func (vcpu *Vcpu) Run() error {
-    // Make sure our registers are flushed.
-    err := vcpu.flushRegs()
-    if err != nil {
-        return err
-    }
-    err = vcpu.flushSRegs()
-    if err != nil {
-        return err
-    }
-
-    for {
-        // Ensure we can run.
-        // For exact semantics, see Pause() and Unpause().
-        vcpu.runLock.Lock()
-        for vcpu.is_paused {
-            vcpu.pauseCond.Broadcast()
-            vcpu.resumeCond.Wait()
-        }
-        vcpu.runLock.Unlock()
-
-        // Execute our run ioctl.
-        _, _, e := syscall.Syscall(
-            syscall.SYS_IOCTL,
-            uintptr(vcpu.fd),
-            uintptr(C.Run),
-            0)
-
-        if e == syscall.EINTR || e == syscall.EAGAIN {
-            continue
-        } else if e != 0 {
-            return e
-        } else {
-            break
-        }
-    }
-
-    return vcpu.GetExitError()
 }
 
 func (vcpu *Vcpu) refreshRegs(dirty bool) error {

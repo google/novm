@@ -31,7 +31,7 @@ const int MpStateSipiReceived = KVM_MP_STATE_SIPI_RECEIVED;
 
 // IOCTL flags.
 const int MemLogDirtyPages = KVM_MEM_LOG_DIRTY_PAGES;
-const int GuestDebugFlags = KVM_GUESTDBG_ENABLE|KVM_GUESTDBG_SINGLESTEP;
+const int GuestDebugEnable = KVM_GUESTDBG_ENABLE|KVM_GUESTDBG_SINGLESTEP;
 const int IoEventFdFlagPio = KVM_IOEVENTFD_FLAG_PIO;
 const int IoEventFdFlagDatamatch = KVM_IOEVENTFD_FLAG_DATAMATCH;
 const int IoEventFdFlagDeassign = KVM_IOEVENTFD_FLAG_DEASSIGN;
@@ -114,7 +114,6 @@ import "C"
 import (
     "errors"
     "log"
-    "sync"
     "syscall"
     "unsafe"
 )
@@ -204,13 +203,8 @@ type Vcpu struct {
     // Is this stepping?
     is_stepping bool
 
-    // Is this paused?
-    is_paused bool
-
-    // Our run lock.
-    runLock    *sync.Mutex
-    pauseCond  *sync.Cond
-    resumeCond *sync.Cond
+    // Our run information.
+    RunInfo
 }
 
 func getMmapSize(fd int) (int, error) {
@@ -394,21 +388,17 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     kvm_run := (*C.struct_kvm_run)(unsafe.Pointer(&mmap[0]))
 
     // Add our Vcpu.
-    runLock := &sync.Mutex{}
     vcpu := &Vcpu{
-        fd:         int(vcpufd),
-        vcpu_id:    vcpu_id,
-        mmap:       mmap,
-        kvm:        kvm_run,
-        runLock:    runLock,
-        resumeCond: sync.NewCond(runLock),
-        pauseCond:  sync.NewCond(runLock),
+        fd:      int(vcpufd),
+        vcpu_id: vcpu_id,
+        mmap:    mmap,
+        kvm:     kvm_run,
     }
     vm.vcpus = append(vm.vcpus, vcpu)
     vm.next_id += 1
 
     // Return our VCPU object.
-    return vcpu, nil
+    return vcpu, vcpu.initRunInfo()
 }
 
 func (vm *Vm) GetVcpus() []*Vcpu {
@@ -537,7 +527,8 @@ func (vm *Vm) MapUserMemory(
         size,
         start,
         uint64(start)+size-1)
-    _, _, e := syscall.Syscall(syscall.SYS_IOCTL,
+    _, _, e := syscall.Syscall(
+        syscall.SYS_IOCTL,
         uintptr(vm.fd),
         uintptr(C.SetUserMemoryRegion),
         uintptr(unsafe.Pointer(&region)))
@@ -597,11 +588,12 @@ func (vm *Vm) SetEventFd(
     return nil
 }
 
-func (vcpu *Vcpu) setSingleStep(on bool) error {
+func (vcpu *Vcpu) stepping(step bool) error {
 
     var guest_debug C.struct_kvm_guest_debug
-    if on {
-        guest_debug.control = C.__u32(C.GuestDebugFlags)
+
+    if step {
+        guest_debug.control = C.__u32(C.GuestDebugEnable)
     } else {
         guest_debug.control = 0
     }
@@ -668,55 +660,14 @@ func (vcpu *Vcpu) IsStepping() bool {
 
 func (vcpu *Vcpu) SetStepping(step bool) error {
     var err error
-    if step {
-        err = vcpu.setSingleStep(true)
-    } else {
-        err = vcpu.setSingleStep(false)
+
+    if step && !vcpu.is_stepping {
+        err = vcpu.stepping(true)
+    } else if !step && vcpu.is_stepping {
+        err = vcpu.stepping(false)
     }
     if err == nil {
         vcpu.is_stepping = step
     }
     return err
-}
-
-func (vcpu *Vcpu) Pause() {
-
-    // Acquire our runlock.
-    // This prevents the vcpu from executing,
-    // although it may currently be in KVM_RUN.
-    vcpu.runLock.Lock()
-    defer vcpu.runLock.Unlock()
-
-    // See if we're currently paused.
-    if vcpu.is_paused {
-        return
-    }
-
-    // Twiddle the debug bit.
-    // This will cause the vcpu to exit, and it
-    // won't be able to re-enter the loop (above).
-    vcpu.setSingleStep(true)
-    if !vcpu.is_stepping {
-        vcpu.setSingleStep(false)
-    }
-
-    // Wait for the vcpu to notify that it is paused.
-    vcpu.is_paused = true
-    vcpu.pauseCond.Wait()
-}
-
-func (vcpu *Vcpu) Unpause() {
-
-    // Acquire our runlock.
-    vcpu.runLock.Lock()
-    defer vcpu.runLock.Unlock()
-
-    // Are we already running?
-    if !vcpu.is_paused {
-        return
-    }
-
-    // Allow the vcpu to resume.
-    vcpu.is_paused = false
-    vcpu.resumeCond.Broadcast()
 }
