@@ -392,22 +392,6 @@ func (fs *Fs) Init() error {
     fs.files = make(map[string]*File)
     fs.lru = make([]*File, 0, 0)
 
-    if fs.Fdlimit == 0 {
-        // Figure out our active limit (1/2 open limit).
-        // We use 1/2 because control connections, tap devices,
-        // disks, etc. all need file descriptors. Note that we
-        // also explicitly handle running out of file descriptors,
-        // but this gives us an open bound to leave room for the
-        // rest of the system (because pieces don't always handle
-        // an EMFILE or ENFILE appropriately).
-        var rlim syscall.Rlimit
-        err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim)
-        if err != nil {
-            return err
-        }
-        fs.Fdlimit = uint(rlim.Cur) / 2
-    }
-
     return nil
 }
 
@@ -429,6 +413,22 @@ func (fs *Fs) Attach() error {
         if err != nil {
             return err
         }
+    }
+
+    if fs.Fdlimit == 0 {
+        // Figure out our active limit (1/2 open limit).
+        // We use 1/2 because control connections, tap devices,
+        // disks, etc. all need file descriptors. Note that we
+        // also explicitly handle running out of file descriptors,
+        // but this gives us an open bound to leave room for the
+        // rest of the system (because pieces don't always handle
+        // an EMFILE or ENFILE appropriately).
+        var rlim syscall.Rlimit
+        err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlim)
+        if err != nil {
+            return err
+        }
+        fs.Fdlimit = uint(rlim.Cur) / 2
     }
 
     return nil
