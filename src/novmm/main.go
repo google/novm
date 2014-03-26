@@ -109,9 +109,6 @@ func main() {
         go func(vcpu *platform.Vcpu) {
             defer vcpu.Dispose()
             err := Loop(vm, vcpu, model, tracer)
-            if err != nil {
-                vcpu.Dump()
-            }
             vcpu_err <- err
         }(vcpu)
     }
