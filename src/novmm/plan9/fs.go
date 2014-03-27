@@ -5,11 +5,20 @@
 package plan9
 
 import (
+    "encoding/json"
     "log"
     "sync"
     "syscall"
 )
 
+//
+// Outstanding request list.
+//
+type Reqlist map[uint16]bool
+
+//
+// Filesystem state.
+//
 type Fs struct {
 
     // The read mappings.
@@ -22,10 +31,10 @@ type Fs struct {
     Dotu bool `json:"dotu"`
 
     // open FiDs.
-    Fidpool map[uint32]*Fid `json:"fidpool"`
+    Pool Fidpool `json:"pool"`
 
     // requests outstanding.
-    Reqs map[uint16]bool `json:"reqs"`
+    Reqs Reqlist `json"reqs"`
 
     // Lock protecting the above.
     fidLock sync.RWMutex
@@ -364,10 +373,10 @@ done:
     if debug {
         fs.fidLock.Lock()
         fs.filesLock.Lock()
-        for fidno, fid := range fs.Fidpool {
+        for fidno, fid := range fs.Pool {
             log.Printf(
                 "  fidno %x: %d refs (%s)",
-                fidno, fid.Refs, fid.file)
+                fidno, fid.refs, fid.file)
         }
         for path, file := range fs.files {
             log.Printf(
@@ -386,7 +395,7 @@ func (fs *Fs) Init() error {
     fs.Read = make(map[string][]string)
     fs.Write = make(map[string]string)
     fs.Dotu = true
-    fs.Fidpool = make(map[uint32]*Fid)
+    fs.Pool = make(map[uint32]*Fid)
     fs.Reqs = make(map[uint16]bool)
     fs.fidCond = sync.NewCond(&fs.fidLock)
     fs.files = make(map[string]*File)
@@ -408,7 +417,7 @@ func (fs *Fs) Attach() error {
     }
 
     // Restore all our Fids.
-    for _, fid := range fs.Fidpool {
+    for _, fid := range fs.Pool {
         fid.file, err = fs.lookup(fid.Path)
         if err != nil {
             return err
@@ -429,6 +438,35 @@ func (fs *Fs) Attach() error {
             return err
         }
         fs.Fdlimit = uint(rlim.Cur) / 2
+    }
+
+    return nil
+}
+
+func (reqs *Reqlist) MarshalJSON() ([]byte, error) {
+
+    // Create an array.
+    reqlist := make([]uint16, 0, len(*reqs))
+    for req, _ := range *reqs {
+        reqlist = append(reqlist, req)
+    }
+
+    // Marshal as an array.
+    return json.Marshal(reqlist)
+}
+
+func (reqs *Reqlist) UnmarshalJSON(data []byte) error {
+
+    // Unmarshal as an array.
+    reqlist := make([]uint16, 0, len(*reqs))
+    err := json.Unmarshal(data, &reqlist)
+    if err != nil {
+        return err
+    }
+
+    // Load all elements.
+    for _, req := range reqlist {
+        (*reqs)[req] = true
     }
 
     return nil

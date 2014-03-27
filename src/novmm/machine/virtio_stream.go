@@ -54,10 +54,10 @@ func (stream *VirtioStream) ReadN(size int) uint64 {
     }
 
     // Map our chunk.
-    ram := stream.Map(stream.read_offset, size)
+    ram := &Ram{stream.Map(stream.read_offset, size)}
 
     // Check for boundary.
-    if len(ram) < size {
+    if ram.Size() < size {
         n1 := stream.ReadN(size / 2)
         n2 := stream.ReadN(size / 2)
         return (n2 << (uint(size) << 2)) | n1
@@ -89,10 +89,10 @@ func (stream *VirtioStream) WriteN(size int, value uint64) {
     }
 
     // Map our chunk.
-    ram := stream.Map(stream.write_offset, size)
+    ram := &Ram{stream.Map(stream.write_offset, size)}
 
     // Check for boundary.
-    if len(ram) < size {
+    if ram.Size() < size {
         stream.WriteN(size/2, value)
         stream.WriteN(size/2, value>>(uint(size)<<2))
     }

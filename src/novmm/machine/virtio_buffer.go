@@ -186,7 +186,7 @@ func (buf *VirtioBuffer) PRead(
 
 func (buf *VirtioBuffer) Map(
     offset int,
-    length int) Ram {
+    length int) []byte {
 
     // Empty read?
     if length == 0 {
@@ -198,15 +198,15 @@ func (buf *VirtioBuffer) Map(
             offset -= len(data)
         } else if offset > 0 {
             if length > len(data)-offset {
-                return Ram(data[offset:len(data)])
+                return data[offset:len(data)]
             } else {
-                return Ram(data[offset : offset+length])
+                return data[offset : offset+length]
             }
         } else {
             if length > len(data) {
-                return Ram(data)
+                return data
             } else {
-                return Ram(data[:length])
+                return data[:length]
             }
         }
     }

@@ -39,10 +39,10 @@ func (device *VirtioBlockDevice) processRequests(
 
     for buf := range vchannel.incoming {
 
-        header := buf.Map(0, 16)
+        header := &Ram{buf.Map(0, 16)}
 
         // Legit?
-        if len(header) < 16 {
+        if header.Size() < 16 {
             vchannel.outgoing <- buf
             continue
         }
@@ -55,7 +55,7 @@ func (device *VirtioBlockDevice) processRequests(
         cmd_type := header.Get32(0)
 
         // Our status byte.
-        status := buf.Map(buf.Length()-1, 1)
+        status := &Ram{buf.Map(buf.Length()-1, 1)}
 
         switch int(cmd_type) {
         case VirtioBlockTIn:

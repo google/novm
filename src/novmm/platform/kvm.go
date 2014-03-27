@@ -401,8 +401,18 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     return vcpu, vcpu.initRunInfo()
 }
 
-func (vm *Vm) GetVcpus() []*Vcpu {
+func (vm *Vm) Vcpus() []*Vcpu {
     return vm.vcpus
+}
+
+func (vm *Vm) VcpuInfo() []VcpuInfo {
+
+    vcpus := make([]VcpuInfo, 0, len(vm.vcpus))
+    for _, vcpu := range vm.vcpus {
+        vcpus = append(vcpus, NewVcpuInfo(vcpu))
+    }
+
+    return vcpus
 }
 
 func (vm *Vm) createIrqChip() error {

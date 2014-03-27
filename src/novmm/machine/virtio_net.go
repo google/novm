@@ -70,7 +70,7 @@ func (device *VirtioNetDevice) processPackets(
         header := buf.Map(0, VirtioNetHeaderSize)
 
         // Legit?
-        if header.Size() < VirtioNetHeaderSize {
+        if len(header) < VirtioNetHeaderSize {
             vchannel.outgoing <- buf
             continue
         }

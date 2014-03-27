@@ -6,36 +6,43 @@ import (
 )
 
 //
-// State controls.
+// State.
 //
 
-type StateRequest struct {
-    // Include the model?
-    Devices bool `json:"devices"`
-
-    // Include the vcpus?
-    Vcpus bool `json:"vcpus"`
-}
-
-type StateResult struct {
-    // The model state.
+type State struct {
+    // Our device state.
+    // Note that we only encode state associated with
+    // specific devices. The model type is a generic wrapped
+    // around devices which *may* encode additional state,
+    // but all the state associated with the model should be
+    // regenerated on startup.
     Devices []machine.DeviceInfo `json:"devices,omitempty"`
 
-    // The vcpus state.
+    // Our vcpu state.
+    // Similarly, this should encode all the state associated
+    // with the underlying VM. If we have other internal platform
+    // devices (such as APICs or PITs) then these should be somehow
+    // encoded as generic devices.
     Vcpus []platform.VcpuInfo `json:"vcpus,omitempty"`
 }
 
-func (control *Control) State(req *StateRequest, res *StateResult) error {
+func (control *Control) State(nop *Nop, res *State) error {
 
-    // Include the model?
-    if req.Devices {
-        res.Devices = control.model.DeviceInfo()
+    // Pause all vcpus.
+    vcpus := control.vm.Vcpus()
+    for _, vcpu := range vcpus {
+        err := vcpu.Pause(false)
+        if err != nil {
+            return err
+        }
+        defer vcpu.Unpause(false)
     }
 
-    // Include vcpus?
-    if req.Vcpus {
-        res.Vcpus = control.vm.VcpuInfo()
-    }
+    // Grab our vcpu states.
+    res.Vcpus = control.vm.VcpuInfo()
+
+    // Grab our devices.
+    res.Devices = control.model.DeviceInfo()
 
     // That's it.
     // We let the serialization handle the rest.

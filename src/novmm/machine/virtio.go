@@ -79,6 +79,7 @@ const __u16 VirtioDescFIndirect = VRING_DESC_F_INDIRECT;
 import "C"
 
 import (
+    "encoding/json"
     "log"
     "math"
     "novmm/platform"
@@ -132,10 +133,10 @@ type VirtioNotification struct {
 }
 
 type VirtioChannel struct {
-    *VirtioDevice
+    *VirtioDevice `json:"-"`
 
     // Our channel number (set in Init()).
-    channelno uint
+    Channel uint `json:"channel"`
 
     // Our channels.
     // Incoming is filled by the guest, and this
@@ -189,7 +190,7 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
         // We're up a buffer.
         vchannel.Debug(
             "vqueue#%d incoming slot [%d]",
-            vchannel.channelno,
+            vchannel.Channel,
             index)
         vchannel.Consumed += 1
 
@@ -226,7 +227,7 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
             } else {
                 // Map the given address.
                 vchannel.Debug("vqueue#%d map [%x-%x]",
-                    vchannel.channelno,
+                    vchannel.Channel,
                     platform.Paddr(addr),
                     uint64(addr)+uint64(length)-1)
 
@@ -253,7 +254,7 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
                 // Send these buffers.
                 vchannel.Debug(
                     "vqueue#%d processing slot [%d]",
-                    vchannel.channelno,
+                    vchannel.Channel,
                     buf.index)
 
                 vchannel.incoming <- buf
@@ -264,7 +265,7 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
                 index = next
                 vchannel.Debug(
                     "vqueue#%d next slot [%d]",
-                    vchannel.channelno,
+                    vchannel.Channel,
                     index)
                 continue
             }
@@ -308,7 +309,7 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
         // Put in the virtqueue.
         vchannel.Debug(
             "vqueue#%d outgoing slot [%d]",
-            vchannel.channelno,
+            vchannel.Channel,
             buf.index)
 
         var evt_interrupt C.int
@@ -358,6 +359,11 @@ func (vchannel *VirtioChannel) Interrupt(queue bool) {
 }
 
 //
+// Our channel map is just queue# => channel object.
+//
+type VirtioChannelMap map[uint]*VirtioChannel
+
+//
 // We store the common configuration here and run
 // a few different routines that allow us to multiplex
 // onto the data channel. This abstracts all the H/W
@@ -367,15 +373,17 @@ type VirtioDevice struct {
     Device
 
     // Our MSI device, if valid.
+    // (This is just a cast from the Device above,
+    // but we save it for convenient access).
     msix *MsiXDevice
 
     // Our channels.
     // We expect that these will be configured
     // by the different devices.
-    Channels map[uint]*VirtioChannel `json:"channels"`
+    Channels VirtioChannelMap `json:"channels"`
 
     // Our configuration.
-    Config Ram `json:"config"`
+    Config *Ram `json:"config"`
 
     // Our virtio-specific registers.
     HostFeatures  Register `json:"host-features"`
@@ -639,7 +647,7 @@ func (vchannel *VirtioChannel) SetAddress(
 func (vchannel *VirtioChannel) Init(n uint) error {
 
     // Save our channel number.
-    vchannel.channelno = n
+    vchannel.Channel = n
 
     // Can't have size 0 or a non power of 2.
     // Ideally this wil be provided by the device.
@@ -672,7 +680,7 @@ func (device *VirtioDevice) NewVirtioChannel(size uint) *VirtioChannel {
 
 func NewVirtioDevice(device Device) *VirtioDevice {
     virtio := &VirtioDevice{Device: device}
-    virtio.Config = make(Ram, 0, 0)
+    virtio.Config = NewRam(0)
     virtio.Channels = make(map[uint]*VirtioChannel)
     virtio.IsrStatus.readclr = 0x1
     virtio.SetFeatures(VirtioRingFEventIdx)
@@ -787,6 +795,10 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
     // Ensure that all our channels are reset.
     // This will do the right thing for restore.
     for n, vchannel := range virtio.Channels {
+        // Restore transient parent.
+        vchannel.VirtioDevice = virtio
+
+        // Re-initialize the channel.
         err := vchannel.Init(n)
         if err != nil {
             return err
@@ -808,4 +820,33 @@ func (virtio *VirtioDevice) Interrupt() error {
     // with an updated status register.
     virtio.IsrStatus.Value = virtio.IsrStatus.Value | 0x1
     return virtio.Device.Interrupt()
+}
+
+func (chanmap *VirtioChannelMap) MarshalJSON() ([]byte, error) {
+
+    // Create an array.
+    chans := make([]*VirtioChannel, 0, 0)
+    for _, virtio_chan := range *chanmap {
+        chans = append(chans, virtio_chan)
+    }
+
+    // Marshal as an array.
+    return json.Marshal(chans)
+}
+
+func (chanmap *VirtioChannelMap) UnmarshalJSON(data []byte) error {
+
+    // Unmarshal as an array.
+    chans := make([]*VirtioChannel, 0, 0)
+    err := json.Unmarshal(data, &chans)
+    if err != nil {
+        return err
+    }
+
+    // Load all elements.
+    for _, virtio_chan := range chans {
+        (*chanmap)[virtio_chan.Channel] = virtio_chan
+    }
+
+    return nil
 }

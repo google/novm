@@ -1,6 +1,7 @@
 package machine
 
 import (
+    "encoding/json"
     "math"
     "novmm/platform"
 )
@@ -77,8 +78,11 @@ type PciBarOps map[uint]IoOperations
 //
 type PciCapability struct {
 
+    // The pci capability id.
+    Id  byte `json:"id"`
+
     // The handlers.
-    IoOperations
+    IoOperations `json:"-"`
 
     // The size of the data.
     Size uint64 `json:"size"`
@@ -88,17 +92,20 @@ type PciCapability struct {
     Offset uint64 `json:"offset"`
 }
 
+// Our map of capabilities.
+type PciCapabilityMap map[byte]*PciCapability
+
 type PciDevice struct {
     MmioDevice
 
     // Packed configuration data.
     // (This encodes the vendor/device, etc.)
-    Config Ram
+    Config *Ram `json:"config"`
 
     // Capabilities.
     // Once they have been built, we actually
     // call RefreshCapabilities to reload the map.
-    Capabilities map[byte]*PciCapability `json:"capabilities"`
+    Capabilities PciCapabilityMap `json:"capabilities"`
 
     // Bar sizes and operations.
     PciBarCount uint `json:"-"`
@@ -122,7 +129,7 @@ type PciBus struct {
     PioDevice
 
     // Our Mmio Handlers.
-    IoHandlers
+    IoHandlers `json:"-"`
 
     // On bus devices.
     devices []*PciDevice
@@ -199,7 +206,7 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
     offset += (reg.PciBus.Offset & 0xfc)
 
     // Is this a capability?
-    for id, capability := range reg.PciBus.last.Capabilities {
+    for _, capability := range reg.PciBus.last.Capabilities {
 
         if offset >= capability.Offset &&
             offset < capability.Offset+capability.Size {
@@ -207,7 +214,7 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
             value, err := capability.Read(offset-capability.Offset, size)
             reg.PciBus.last.Debug(
                 "pci capabilities read [%x] %x @ %x [size: %d]",
-                id,
+                capability.Id,
                 value,
                 offset-capability.Offset,
                 size)
@@ -238,14 +245,14 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
     offset += (reg.PciBus.Offset & 0xfc)
 
     // Is this a capability?
-    for id, capability := range reg.PciBus.last.Capabilities {
+    for _, capability := range reg.PciBus.last.Capabilities {
 
         if offset >= capability.Offset &&
             offset < capability.Offset+capability.Size {
 
             reg.PciBus.last.Debug(
                 "pci capabilities write [%x] %x @ %x [size: %d]",
-                id,
+                capability.Id,
                 value,
                 offset-capability.Offset,
                 size)
@@ -284,10 +291,10 @@ func NewPciDevice(
 
     // Create the pci device.
     device := new(PciDevice)
-    device.Config = make(Ram, 0x40, 0x40)
+    device.Config = NewRam(0x40)
     device.PciBarSizes = make(map[uint]uint32)
     device.PciBarOps = make(map[uint]IoOperations)
-    device.Capabilities = make(map[byte]*PciCapability)
+    device.Capabilities = make(PciCapabilityMap)
     device.Init(info)
 
     // Set our configuration space.
@@ -398,7 +405,7 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // Already done, we don't mess with it.
     if len(pcidevice.Capabilities) > 0 &&
-        pcidevice.Config[PciConfigOffsetStatus]&0x10 == 0x10 {
+        pcidevice.Config.Get8(PciConfigOffsetStatus)&0x10 != 0 {
         return
     }
 
@@ -413,12 +420,12 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
     last_pointer := byte(0x0)
     consumed := 0x40
 
-    for id, capability := range pcidevice.Capabilities {
+    for _, capability := range pcidevice.Capabilities {
 
         // Set this capability offset.
         pcidevice.Config.GrowTo(consumed + 2 + int(capability.Size))
-        pcidevice.Config[consumed] = id
-        pcidevice.Config[consumed+1] = last_pointer
+        pcidevice.Config.Set8(consumed, capability.Id)
+        pcidevice.Config.Set8(consumed+1, last_pointer)
         capability.Offset = uint64(consumed + 2)
 
         // Update our pointer.
@@ -431,8 +438,9 @@ func (pcidevice *PciDevice) RebuildCapabilities() {
 
     // Save the first item,
     // and set out capabilities status bit.
-    pcidevice.Config[PciConfigOffsetCapabilities] = last_pointer
-    pcidevice.Config[PciConfigOffsetStatus] |= 0x10
+    status := pcidevice.Config.Get8(PciConfigOffsetStatus)
+    pcidevice.Config.Set8(PciConfigOffsetCapabilities, last_pointer)
+    pcidevice.Config.Set8(PciConfigOffsetStatus, status|0x10)
 }
 
 func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
@@ -471,4 +479,44 @@ func (pcidevice *PciDevice) Attach(vm *platform.Vm, model *Model) error {
 
 func (pcidevice *PciDevice) Interrupt() error {
     return pcidevice.std_interrupt()
+}
+
+func (capmap *PciCapabilityMap) MarshalJSON() ([]byte, error) {
+
+    // Create an array.
+    caps := make([]*PciCapability, 0, 0)
+    for _, pcicap := range *capmap {
+        caps = append(caps, pcicap)
+    }
+
+    // Marshal as an array.
+    return json.Marshal(caps)
+}
+
+func (capmap *PciCapabilityMap) UnmarshalJSON(data []byte) error {
+
+    // Unmarshal as an array.
+    caps := make([]*PciCapability, 0, 0)
+    err := json.Unmarshal(data, &caps)
+    if err != nil {
+        return err
+    }
+
+    // Load all elements.
+    for _, pcicap := range caps {
+
+        // Lookup the existing capability.
+        usecap, ok := (*capmap)[pcicap.Id]
+        if !ok {
+            return PciCapabilityMismatch
+        }
+
+        // Load attributes.
+        // NOTE: We don't replace the operations,
+        // or the data backing them.
+        usecap.Size = pcicap.Size
+        usecap.Offset = pcicap.Offset
+    }
+
+    return nil
 }

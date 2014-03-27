@@ -1,6 +1,8 @@
 package main
 
 import (
+    "bytes"
+    "encoding/json"
     "flag"
     "log"
     "novmm/control"
@@ -15,9 +17,8 @@ import (
 // Our control server.
 var control_fd = flag.Int("controlfd", -1, "bound control socket")
 
-// Machine specifications.
-var vcpu_data = flag.String("vcpus", "[]", "list of vcpu states")
-var device_data = flag.String("devices", "[]", "list of device states")
+// Machine state.
+var state = flag.String("state", "{}", "machine state")
 
 // Functional flags.
 var eventfds = flag.Bool("eventfds", false, "enable eventfds")
@@ -55,8 +56,17 @@ func main() {
         log.Fatal(err)
     }
 
+    // Load our machine state.
+    json_decoder := json.NewDecoder(bytes.NewBuffer([]byte(*state)))
+    json_decoder.UseNumber()
+    state := new(control.State)
+    err = json_decoder.Decode(&state)
+    if err != nil {
+        log.Fatal(err)
+    }
+
     // Load all vcpus.
-    vcpus, err := vm.LoadVcpus([]byte(*vcpu_data))
+    vcpus, err := vm.LoadVcpus(state.Vcpus)
     if err != nil {
         log.Fatal(err)
     }
@@ -72,7 +82,7 @@ func main() {
     }
 
     // Load all devices.
-    proxy, err := model.LoadDevices(vm, []byte(*device_data), *debug)
+    proxy, err := model.LoadDevices(vm, state.Devices, *debug)
     if err != nil {
         log.Fatal(err)
     }

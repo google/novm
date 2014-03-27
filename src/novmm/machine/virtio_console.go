@@ -40,7 +40,7 @@ func (device *VirtioConsoleDevice) sendCtrl(
 
     buf := <-device.Channels[2].incoming
 
-    header := buf.Map(0, 8)
+    header := &Ram{buf.Map(0, 8)}
 
     if header.Size() < 8 {
         buf.length = 0
@@ -62,7 +62,7 @@ func (device *VirtioConsoleDevice) ctrlConsole(
 
     for buf := range vchannel.incoming {
 
-        header := buf.Map(0, 8)
+        header := &Ram{buf.Map(0, 8)}
 
         // Legit?
         if header.Size() < 8 {

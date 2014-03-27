@@ -79,6 +79,7 @@ func (control *Control) handle(
 
         decoder := json.NewDecoder(control_file)
         encoder := json.NewEncoder(control_file)
+        decoder.UseNumber()
 
         var start noguest.StartCommand
         err := decoder.Decode(&start)
@@ -217,6 +218,7 @@ func NewControl(
     control := new(Control)
     control.control_fd = control_fd
     control.real_init = real_init
+    control.model = model
     control.vm = vm
     control.tracer = tracer
     control.proxy = proxy

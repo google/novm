@@ -38,8 +38,8 @@ func NewPciHostBridge(info *DeviceInfo) (Device, error) {
     hostbridge.PciBarCount = 2
 
     // Set our type & command.
-    hostbridge.Config[0xe] = 1
-    hostbridge.Config[0x4] |= 0x04
+    hostbridge.Config.Set8(0xe, 1)
+    hostbridge.Config.Set8(0x4, hostbridge.Config.Get8(0x4)|0x04)
 
     // Add our PortRoot capability.
     hostbridge.Capabilities[PciCapabilityPortRoot] = &PciCapability{

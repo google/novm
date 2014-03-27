@@ -51,20 +51,18 @@ type MsiXEntry struct {
 type MsiXDevice struct {
     *PciDevice
 
-    // This is a pointer to the pci capability.
-    // NOTE: We add it and rediscover it in order
-    // to avoid serialization problems.
-    conf *MsiXConf
-
-    // Our saved interrupt function.
-    msi_interrupt func(addr platform.Paddr, data uint32) error
+    // Our Pci configuration.
+    *MsiXConf
 
     // Our pending bit array.
-    Pending Ram `json:"pending"`
+    Pending *Ram `json:"pending"`
 
     // The entries are a device that we expose
     // to the PCI Bar as specified in the creation.
     Entries []MsiXEntry `json:"entries"`
+
+    // Our saved interrupt function.
+    msi_interrupt func(addr platform.Paddr, data uint32) error
 }
 
 func (msix *MsiXEntry) Read(offset uint64, size uint) (uint64, error) {
@@ -127,7 +125,7 @@ func (msix *MsiXDevice) ClearPending(vector int) {
 }
 
 func (msix *MsiXDevice) IsMasked(vector int) bool {
-    if msix.conf.Control.Value&PciMsiXControlMasked != 0 {
+    if msix.MsiXConf.Control.Value&PciMsiXControlMasked != 0 {
         return true
     }
     entry := msix.FindEntry(int(vector / 8))
@@ -261,18 +259,19 @@ func NewMsiXDevice(
     // it aligns on a 64-bit boundary, to make accesses to
     // the entries that follow the pending bits convenient.
     pending_size := 16 * int((vectors+63)/64)
-    msix.Pending = make(Ram, 0, 0)
+    msix.Pending = NewRam(0)
     msix.Pending.GrowTo(pending_size)
 
     // Create a new set of control registers.
-    msix.conf = new(MsiXConf)
-    msix.conf.Control.readonly = math.MaxUint64 & ^PciMsiXControlEnable
-    msix.conf.Control.Value = uint64(vectors - 1)
-    msix.conf.TableOffset.readonly = math.MaxUint64
-    msix.conf.TableOffset.Value = uint64(barno)
-    msix.conf.TableOffset.Value |= uint64(msix.Pending.Size())
-    msix.conf.PbaOffset.readonly = math.MaxUint64
-    msix.conf.PbaOffset.Value = uint64(barno)
+    msix.MsiXConf = new(MsiXConf)
+    msix.MsiXConf.MsiXDevice = msix
+    msix.MsiXConf.Control.readonly = math.MaxUint64 & ^PciMsiXControlEnable
+    msix.MsiXConf.Control.Value = uint64(vectors - 1)
+    msix.MsiXConf.TableOffset.readonly = math.MaxUint64
+    msix.MsiXConf.TableOffset.Value = uint64(barno)
+    msix.MsiXConf.TableOffset.Value |= uint64(msix.Pending.Size())
+    msix.MsiXConf.PbaOffset.readonly = math.MaxUint64
+    msix.MsiXConf.PbaOffset.Value = uint64(barno)
 
     // Add the pci bar.
     // This includes our pending array & entries.
@@ -285,8 +284,12 @@ func NewMsiXDevice(
 
     // Add our capability.
     // This maps to our control register.
+    // During serialization and deserialization, the
+    // attributes of this object may be modified, but
+    // we are guaranteed that it will not be replaced.
     pcidevice.Capabilities[PciCapabilityMSIX] = &PciCapability{
-        IoOperations: msix.conf,
+        Id:           PciCapabilityMSIX,
+        IoOperations: msix.MsiXConf,
         Size:         10,
     }
 
@@ -296,16 +299,8 @@ func NewMsiXDevice(
 
 func (msix *MsiXDevice) Attach(vm *platform.Vm, model *Model) error {
 
-    // Probe to find our configuration data.
-    msi_conf := msix.PciDevice.Capabilities[PciCapabilityMSIX]
-    msix.conf, _ = msi_conf.IoOperations.(*MsiXConf)
-    if msix.conf == nil {
-        // What the hell happened?
-        return PciMSIError
-    }
-
     // Reset all transient links.
-    msix.conf.MsiXDevice = msix
+    // These may be lost in serialization.
     for _, entry := range msix.Entries {
         entry.MsiXDevice = msix
     }
@@ -323,7 +318,7 @@ func (msix *MsiXDevice) IsMSIXEnabled() bool {
     // Just check our control bit.
     // We expect callers to use this before
     // they call SendInterrupt() below.
-    return msix.conf.Control.Value&PciMsiXControlEnable != 0
+    return msix.MsiXConf.Control.Value&PciMsiXControlEnable != 0
 }
 
 func (msix *MsiXDevice) SendInterrupt(vector int) error {

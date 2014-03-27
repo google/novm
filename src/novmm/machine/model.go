@@ -25,9 +25,6 @@ type Model struct {
     // This maps interrupts to devices.
     InterruptMap
 
-    // How many vcpus?
-    vcpus uint
-
     // All devices.
     devices []Device
 
@@ -78,4 +75,14 @@ func (model *Model) flush() error {
 
 func (model *Model) Devices() []Device {
     return model.devices
+}
+
+func (model *Model) DeviceInfo() []DeviceInfo {
+
+    devices := make([]DeviceInfo, 0, len(model.devices))
+    for _, device := range model.devices {
+        devices = append(devices, NewDeviceInfo(device))
+    }
+
+    return devices
 }

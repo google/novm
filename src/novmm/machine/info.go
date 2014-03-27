@@ -49,6 +49,8 @@ func (info DeviceInfo) Load() (Device, error) {
         // This will override all the default
         // settings in the initialized object.
         json_decoder := json.NewDecoder(buffer)
+        json_decoder.UseNumber()
+
         log.Printf("Loading %s...", device.Name())
         err = json_decoder.Decode(device)
         if err != nil {
@@ -64,4 +66,14 @@ func (info DeviceInfo) Load() (Device, error) {
 
     // We're done.
     return device, nil
+}
+
+func NewDeviceInfo(device Device) DeviceInfo {
+
+    return DeviceInfo{
+        Name:   device.Name(),
+        Driver: device.Driver(),
+        Data:   device,
+        Debug:  device.IsDebugging(),
+    }
 }

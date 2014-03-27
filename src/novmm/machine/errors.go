@@ -20,6 +20,7 @@ var InterruptUnavailable = errors.New("No interrupt available!")
 var PciInvalidAddress = errors.New("Invalid PCI address!")
 var PciBusNotFound = errors.New("Requested PCI devices, but no bus found?")
 var PciMSIError = errors.New("MSI internal error?")
+var PciCapabilityMismatch = errors.New("Capability mismatch!")
 
 // UART errors.
 var UartUnknown = errors.New("Unknown COM port.")

@@ -5,50 +5,52 @@ import (
     "unsafe"
 )
 
-type Ram []byte
+type Ram struct {
+    Data []byte `json:"data"`
+}
 
 func (ram *Ram) Size() int {
-    return len(*ram)
+    return len(ram.Data)
 }
 
 func (ram *Ram) GrowTo(size int) {
-    if size > len(*ram) {
-        missing := size - len(*ram)
+    if size > len(ram.Data) {
+        missing := size - len(ram.Data)
         new_bytes := make([]byte, missing, missing)
-        *ram = append(*ram, new_bytes...)
+        ram.Data = append(ram.Data, new_bytes...)
     }
 }
 
 func (ram *Ram) Set8(offset int, data uint8) {
-    (*ram)[offset] = byte(data)
+    ram.Data[offset] = byte(data)
 }
 
 func (ram *Ram) Get8(offset int) uint8 {
-    return (*ram)[offset]
+    return ram.Data[offset]
 }
 
 func (ram *Ram) Set16(offset int, data uint16) {
-    *(*uint16)(unsafe.Pointer(&(*ram)[offset])) = data
+    *(*uint16)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get16(offset int) uint16 {
-    return *(*uint16)(unsafe.Pointer(&(*ram)[offset]))
+    return *(*uint16)(unsafe.Pointer(&ram.Data[offset]))
 }
 
 func (ram *Ram) Set32(offset int, data uint32) {
-    *(*uint32)(unsafe.Pointer(&(*ram)[offset])) = data
+    *(*uint32)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get32(offset int) uint32 {
-    return *(*uint32)(unsafe.Pointer(&(*ram)[offset]))
+    return *(*uint32)(unsafe.Pointer(&ram.Data[offset]))
 }
 
 func (ram *Ram) Set64(offset int, data uint64) {
-    *(*uint64)(unsafe.Pointer(&(*ram)[offset])) = data
+    *(*uint64)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get64(offset int) uint64 {
-    return *(*uint64)(unsafe.Pointer(&(*ram)[offset]))
+    return *(*uint64)(unsafe.Pointer(&ram.Data[offset]))
 }
 
 func (ram *Ram) Read(offset uint64, size uint) (uint64, error) {
@@ -97,4 +99,10 @@ func (ram *Ram) Write(offset uint64, size uint, value uint64) error {
     }
 
     return nil
+}
+
+func NewRam(size int) *Ram {
+    ram := new(Ram)
+    ram.Data = make([]byte, size, size)
+    return ram
 }

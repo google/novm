@@ -21,7 +21,7 @@ type VcpuSettings struct {
 
 func (control *Control) Vcpu(settings *VcpuSettings, nop *Nop) error {
     // A valid vcpu?
-    vcpus := control.vm.GetVcpus()
+    vcpus := control.vm.Vcpus()
     if settings.Id >= len(vcpus) {
         return syscall.EINVAL
     }

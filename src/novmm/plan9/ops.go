@@ -269,18 +269,18 @@ func (fs *Fs) readDir(
         // We generate a list of children.
         // This is cached for future reads.
         var err error
-        fid.direntries, err = fid.file.children(fs, fid.Path)
+        fid.Direntries, err = fid.file.children(fs, fid.Path)
         if err != nil {
             return nil, err
         }
     }
 
     // Exhausted?
-    if fid.direntries == nil {
+    if fid.Direntries == nil {
         return []*Dir{}, nil
     }
 
-    return fid.direntries, nil
+    return fid.Direntries, nil
 }
 
 func (fs *Fs) readFile(
@@ -304,11 +304,11 @@ func (fs *Fs) readDirPost(
 
     if fid.file.Qid.Type&QTDIR != 0 {
         fid.Diroffset += uint64(count)
-        if fid.direntries != nil &&
-            entries < len(fid.direntries) {
-            fid.direntries = fid.direntries[entries:]
+        if fid.Direntries != nil &&
+            entries < len(fid.Direntries) {
+            fid.Direntries = fid.Direntries[entries:]
         } else {
-            fid.direntries = nil
+            fid.Direntries = nil
         }
     }
 }

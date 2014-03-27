@@ -1,6 +1,12 @@
 package platform
 
 type VcpuInfo struct {
-    Regs  []byte `json:"regs"`
-    Sregs []byte `json:"sregs"`
+    Regs Registers `json:"registers"`
+}
+
+func NewVcpuInfo(vcpu *Vcpu) VcpuInfo {
+
+    return VcpuInfo{
+        Regs: vcpu.GetRegisters(),
+    }
 }

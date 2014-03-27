@@ -12,7 +12,8 @@ type UserMemory struct {
     // As laid-out.
     // This is indexed by offset in the file,
     // and each offset points to the given region.
-    Map map[uint64]MemoryRegion `json:"map"`
+    // FIXME: This is not serialized correctly.
+    Map map[uint64]MemoryRegion `json:"-"`
 
     // The offset in the file.
     Offset int64 `json:"offset"`

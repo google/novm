@@ -286,11 +286,12 @@ class NovmManager(object):
             devices.append(memory.UserMemory(
                 size=1024*1024*(memsize or 1024)))
 
-            # Provide our CPU data.
-            args.append("-vcpus=%s" %
-                json.dumps([
-                    cpu.Cpu().arg() for _ in range(vcpus)
-            ]))
+            # Provide our state.
+            state = {
+                "vcpus": [cpu.Cpu().arg() for _ in range(vcpus)],
+                "devices": [dev.arg() for dev in devices],
+            }
+            args.append("-state=%s" % json.dumps(state))
 
             # Add our control socket.
             ctrl_path = os.path.join(self._controls, "%s.ctrl" % str(os.getpid()))
@@ -303,9 +304,8 @@ class NovmManager(object):
                 for dev in devices
                 if dev.cmdline() is not None
             ]), cmdline))
-            args.append("-devices=%s" % json.dumps([
-                dev.arg() for dev in devices
-            ]))
+
+            # Add extra (debugging) arguments.
             args.extend(["-%s" % x for x in vmmopt])
 
             # Save metadata.
