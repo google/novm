@@ -250,7 +250,7 @@ func getCpuidData(fd int) ([]byte, error) {
 }
 
 func NewVm() (*Vm, error) {
-    fd, err := syscall.Open("/dev/kvm", syscall.O_RDWR, 0)
+    fd, err := syscall.Open("/dev/kvm", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
     if err != nil {
         return nil, err
     }
@@ -295,6 +295,10 @@ func NewVm() (*Vm, error) {
     if e != 0 {
         return nil, e
     }
+
+    // Make sure this VM gets closed.
+    // (Same thing is done for Vcpus).
+    syscall.CloseOnExec(int(vmfd))
 
     // Prepare our VM object.
     log.Print("kvm: VM created.")
@@ -362,6 +366,11 @@ func (vm *Vm) NewVcpu() (*Vcpu, error) {
     if e != 0 {
         return nil, e
     }
+
+    // Make sure this disappears on exec.
+    // This is a race condition here, but realistically
+    // we are not going to be restarting at this point.
+    syscall.CloseOnExec(int(vcpufd))
 
     // Set our vcpuid.
     _, _, e = syscall.Syscall(

@@ -570,7 +570,8 @@ func (file *File) lockWrite(
         return file.lockWrite(fs, offset, length)
     }
 
-    mode := syscall.O_RDWR
+    // NOTE: All files are opened CLOEXEC.
+    mode := syscall.O_RDWR | syscall.O_CLOEXEC
     var perm uint32
 
     // Make sure the file exists.
