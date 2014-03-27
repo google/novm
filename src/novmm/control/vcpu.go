@@ -1,8 +1,12 @@
-package main
+package control
 
 import (
     "syscall"
 )
+
+//
+// Low-level vcpu controls.
+//
 
 type VcpuSettings struct {
     // Which vcpu?
@@ -15,11 +19,10 @@ type VcpuSettings struct {
     Paused bool `json:"paused"`
 }
 
-func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
+func (control *Control) Vcpu(settings *VcpuSettings, nop *Nop) error {
     // A valid vcpu?
     vcpus := control.vm.GetVcpus()
     if settings.Id >= len(vcpus) {
-        *ok = false
         return syscall.EINVAL
     }
 
@@ -29,7 +32,6 @@ func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
     // Ensure steping is as expected.
     err := vcpu.SetStepping(settings.Step)
     if err != nil {
-        *ok = false
         return err
     }
 
@@ -41,6 +43,5 @@ func (control *Control) Vcpu(settings *VcpuSettings, ok *bool) error {
     }
 
     // Done.
-    *ok = (err == nil)
     return err
 }

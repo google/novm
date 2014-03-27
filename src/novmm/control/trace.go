@@ -1,16 +1,20 @@
-package main
+package control
+
+//
+// Tracing & debug controls.
+//
 
 type TraceSettings struct {
     // Tracing?
     Enable bool `json:"enable"`
 }
 
-func (control *Control) Trace(settings *TraceSettings, ok *bool) error {
+func (control *Control) Trace(settings *TraceSettings, nop *Nop) error {
     if settings.Enable {
         control.tracer.Enable()
     } else {
         control.tracer.Disable()
     }
-    *ok = true
+
     return nil
 }

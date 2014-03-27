@@ -1,8 +1,12 @@
-package main
+package control
 
 import (
     "regexp"
 )
+
+//
+// Low-level device controls.
+//
 
 type DeviceSettings struct {
     // Name.
@@ -12,7 +16,7 @@ type DeviceSettings struct {
     Debug bool `json:"debug"`
 }
 
-func (control *Control) Device(settings *DeviceSettings, ok *bool) error {
+func (control *Control) Device(settings *DeviceSettings, nop *Nop) error {
 
     rp, err := regexp.Compile(settings.Name)
     if err != nil {
@@ -25,6 +29,5 @@ func (control *Control) Device(settings *DeviceSettings, ok *bool) error {
         }
     }
 
-    *ok = true
     return nil
 }

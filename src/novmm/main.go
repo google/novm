@@ -3,6 +3,7 @@ package main
 import (
     "flag"
     "log"
+    "novmm/control"
     "novmm/loader"
     "novmm/machine"
     "novmm/platform"
@@ -114,11 +115,11 @@ func main() {
     }
 
     // Create our RPC server.
-    if *control_fd == -1 {
-        log.Fatal(InvalidControlSocket)
+    control, err := control.NewControl(*control_fd, *real_init, model, vm, tracer, proxy)
+    if err != nil {
+        log.Fatal(err)
     }
-    control := NewControl(*control_fd, *real_init, model, vm, tracer, proxy)
-    go control.serve()
+    go control.Serve()
 
     // Wait until we get a TERM signal, or all the VCPUs are dead.
     vcpus_alive := len(vcpus)

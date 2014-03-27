@@ -1,4 +1,4 @@
-package main
+package control
 
 import (
     "encoding/json"
@@ -185,7 +185,7 @@ func (control *Control) handle(
     }
 }
 
-func (control *Control) serve() {
+func (control *Control) Serve() {
 
     // Bind our rpc server.
     server := rpc.NewServer()
@@ -206,7 +206,12 @@ func NewControl(
     model *machine.Model,
     vm *platform.Vm,
     tracer *loader.Tracer,
-    proxy machine.Proxy) *Control {
+    proxy machine.Proxy) (*Control, error) {
+
+    // Is it invalid, for sure?
+    if control_fd < 0 {
+        return nil, InvalidControlSocket
+    }
 
     // Create our control object.
     control := new(Control)
@@ -220,5 +225,5 @@ func NewControl(
     control.client_res = make(chan error)
     go control.init()
 
-    return control
+    return control, nil
 }
