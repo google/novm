@@ -33,6 +33,10 @@ func (tracer *Tracer) Disable() {
     tracer.enabled = false
 }
 
+func (tracer *Tracer) IsEnabled() bool {
+    return tracer.enabled
+}
+
 func (tracer *Tracer) toPaddr(
     vcpu *platform.Vcpu,
     reg platform.RegisterValue) string {

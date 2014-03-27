@@ -287,11 +287,18 @@ class NovmManager(object):
                 size=1024*1024*(memsize or 1024)))
 
             # Provide our state.
-            state = {
-                "vcpus": [cpu.Cpu().arg() for _ in range(vcpus)],
-                "devices": [dev.arg() for dev in devices],
-            }
-            args.append("-state=%s" % json.dumps(state))
+            with tempfile.NamedTemporaryFile() as state_file:
+                # Dump to a temporary file.
+                json.dump({
+                    "vcpus": [cpu.Cpu().arg() for _ in range(vcpus)],
+                    "devices": [dev.arg() for dev in devices],
+                }, state_file)
+                state_file.seek(0, 0)
+
+                # Keep the descriptor.
+                statefd = os.dup(state_file.fileno())
+
+            args.append("-statefd=%d" % statefd)
 
             # Add our control socket.
             ctrl_path = os.path.join(self._controls, "%s.ctrl" % str(os.getpid()))

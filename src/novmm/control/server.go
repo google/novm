@@ -90,7 +90,7 @@ func (control *Control) handle(
         }
 
         // Grab our client.
-        client, err := control.ready()
+        client, err := control.Ready()
         if err != nil {
             encoder.Encode(err.Error())
             return
@@ -207,7 +207,8 @@ func NewControl(
     model *machine.Model,
     vm *platform.Vm,
     tracer *loader.Tracer,
-    proxy machine.Proxy) (*Control, error) {
+    proxy machine.Proxy,
+    is_load bool) (*Control, error) {
 
     // Is it invalid, for sure?
     if control_fd < 0 {
@@ -225,7 +226,12 @@ func NewControl(
 
     // Start our barrier.
     control.client_res = make(chan error)
-    go control.init()
+    if is_load {
+        go control.init()
+    } else {
+        // Already synchronized.
+        control.client_res <- nil
+    }
 
     return control, nil
 }

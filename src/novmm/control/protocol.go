@@ -61,7 +61,7 @@ func (control *Control) barrier() {
     control.client = rpc.NewClientWithCodec(control.client_codec)
 }
 
-func (control *Control) ready() (*rpc.Client, error) {
+func (control *Control) Ready() (*rpc.Client, error) {
     control.client_once.Do(control.barrier)
     return control.client, control.client_err
 }

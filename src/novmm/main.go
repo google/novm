@@ -1,9 +1,10 @@
 package main
 
 import (
-    "bytes"
     "encoding/json"
     "flag"
+    "fmt"
+    "io/ioutil"
     "log"
     "novmm/control"
     "novmm/loader"
@@ -11,6 +12,7 @@ import (
     "novmm/platform"
     "os"
     "os/signal"
+    "strings"
     "syscall"
 )
 
@@ -18,10 +20,12 @@ import (
 var control_fd = flag.Int("controlfd", -1, "bound control socket")
 
 // Machine state.
-var state = flag.String("state", "{}", "machine state")
+var statefd = flag.Int("statefd", 0, "machine state file")
 
 // Functional flags.
 var eventfds = flag.Bool("eventfds", false, "enable eventfds")
+
+// Guest-related flags.
 var real_init = flag.Bool("init", false, "real in-guest init?")
 
 // Linux parameters.
@@ -35,6 +39,100 @@ var system_map = flag.String("sysmap", "", "kernel symbol map")
 var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
 var debug = flag.Bool("debug", false, "devices start debugging")
+
+func restart(
+    model *machine.Model,
+    vm *platform.Vm,
+    is_tracing bool) error {
+
+    // Get our binary.
+    bin, err := os.Readlink("/proc/self/exe")
+    if err != nil {
+        return err
+    }
+    _, err = os.Stat(bin)
+    if err != nil {
+        // If this is no longer the same binary, then the
+        // kernel proc node will have "fixed" the symlink
+        // to point to "/path (deleted)". This is mildly
+        // annoying, as one would assume there would be a
+        // better way of transmitting that information.
+        if os.IsNotExist(err) && strings.HasSuffix(bin, " (deleted)") {
+            bin = strings.TrimSuffix(bin, " (deleted)")
+            _, err = os.Stat(bin)
+        }
+        if err != nil {
+            return err
+        }
+    }
+
+    // Pause all vcpus.
+    // (If we have to exit this function, we
+    // ensure that the Vcpus will be unpaused).
+    vcpus := vm.Vcpus()
+    for _, vcpu := range vcpus {
+        err := vcpu.Pause(false)
+        if err != nil {
+            return err
+        }
+        defer vcpu.Unpause(false)
+    }
+
+    // Collect our device and vcpu data.
+    // Note that devices and vcpus contain all stepping
+    // and debugging information, so it's not necessary
+    // to replay those arguments (and would be wrong).
+    state := &control.State{
+        Devices: model.DeviceInfo(),
+        Vcpus:   vm.VcpuInfo(),
+    }
+
+    // Encode our state in a temporary file.
+    // This is passed in to the new VMM as the statefd.
+    // We unlink it immediately because we don't need to
+    // access it by name, and can ensure it is cleaned up.
+    // Note that the TempFile is normally opened CLOEXEC.
+    // This means that need we need to perform a DUP in
+    // order to get an FD that can pass to the child.
+    state_file, err := ioutil.TempFile(os.TempDir(), "state")
+    if err != nil {
+        return err
+    }
+    defer state_file.Close()
+    err = os.Remove(state_file.Name())
+    if err != nil {
+        return err
+    }
+    json_encoder := json.NewEncoder(state_file)
+    err = json_encoder.Encode(&state)
+    if err != nil {
+        return err
+    }
+    _, err = state_file.Seek(0, 0)
+    if err != nil {
+        return err
+    }
+    state_fd, err := syscall.Dup(int(state_file.Fd()))
+    if err != nil {
+        return err
+    }
+    defer syscall.Close(state_fd)
+
+    // Prepare to reexec.
+    cmd := []string{
+        os.Args[0],
+        fmt.Sprintf("-controlfd=%d", *control_fd),
+        fmt.Sprintf("-statefd=%d", state_fd),
+        fmt.Sprintf("-eventfds=%t", *eventfds),
+        fmt.Sprintf("-trace=%t", is_tracing),
+    }
+
+    return syscall.Exec(bin, cmd, os.Environ())
+}
+
+func die(err error) {
+    log.Fatal(err)
+}
 
 func main() {
     // Parse all command line options.
@@ -57,12 +155,22 @@ func main() {
     }
 
     // Load our machine state.
-    json_decoder := json.NewDecoder(bytes.NewBuffer([]byte(*state)))
+    state_file := os.NewFile(uintptr(*statefd), "state")
+    json_decoder := json.NewDecoder(state_file)
     json_decoder.UseNumber()
     state := new(control.State)
     err = json_decoder.Decode(&state)
     if err != nil {
-        log.Fatal(err)
+        die(err)
+    }
+
+    // We're done with the state file.
+    state_file.Close()
+
+    // Load all devices.
+    proxy, err := model.LoadDevices(vm, state.Devices, *debug)
+    if err != nil {
+        die(err)
     }
 
     // Load all vcpus.
@@ -87,6 +195,12 @@ func main() {
         log.Fatal(err)
     }
 
+    // Remember whether or not this is a load.
+    // If it's a load, then we have to sync the
+    // control interface. If it's not, then we
+    // should skip the control interface sync.
+    is_load := false
+
     // Load given kernel and initrd.
     var sysmap loader.SystemMap
     var convention *loader.Convention
@@ -103,6 +217,9 @@ func main() {
         if err != nil {
             log.Fatal(err)
         }
+
+        // This is a fresh boot.
+        is_load = true
     }
 
     // Create our tracer with the map and convention.
@@ -125,16 +242,27 @@ func main() {
     }
 
     // Create our RPC server.
-    control, err := control.NewControl(*control_fd, *real_init, model, vm, tracer, proxy)
+    control, err := control.NewControl(
+        *control_fd,
+        *real_init,
+        model,
+        vm,
+        tracer,
+        proxy,
+        is_load)
+
     if err != nil {
         log.Fatal(err)
     }
     go control.Serve()
 
     // Wait until we get a TERM signal, or all the VCPUs are dead.
+    // If we receive a HUP signal, then we will re-exec with the
+    // appropriate device state and vcpu state. This is essentially
+    // a live upgrade (i.e. the binary has been replaced, we rerun).
     vcpus_alive := len(vcpus)
     signals := make(chan os.Signal, 1)
-    signal.Notify(signals, syscall.SIGTERM)
+    signal.Notify(signals, syscall.SIGTERM, syscall.SIGHUP)
 
     for {
         select {
@@ -146,7 +274,21 @@ func main() {
         case sig := <-signals:
             switch sig {
             case syscall.SIGTERM:
+                log.Printf("Shutdown.")
                 os.Exit(0)
+
+            case syscall.SIGHUP:
+                // Make sure we have control sync'ed.
+                _, err := control.Ready()
+                if err != nil {
+                    log.Fatal(err)
+                }
+
+                // This is a bit of a special case.
+                // We don't log a fatal message here,
+                // but rather unpause and keep going.
+                err = restart(model, vm, tracer.IsEnabled())
+                log.Printf("Restart failed: %s", err.Error())
             }
         }
 
