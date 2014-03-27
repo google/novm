@@ -282,6 +282,9 @@ func (fs *Fs) removeLru(file *File, lock bool) {
             fs.lru = fs.lru[0 : len(fs.lru)-1]
             fs.updateLru(other_file, false)
         }
+
+        // Clear our LRU index.
+        file.index = -1
     }
 }
 
