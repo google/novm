@@ -350,6 +350,7 @@ class NovmManager(object):
             exc_info = sys.exc_info()
             raise exc_info[0], exc_info[1], exc_info[2]
 
+    @cli.alwaysjson
     def control(self,
             id=cli.StrOpt("The instance id."),
             name=cli.StrOpt("The instance name."),

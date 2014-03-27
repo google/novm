@@ -39,6 +39,13 @@ class ListOpt(Option):
     def __len__(self):
         return 0
 
+def alwaysjson(fn):
+    # Add a simple attribute so that we can
+    # easily treat this function specially
+    # when deciding what to do with output.
+    setattr(fn, '_alwaysjson_', True)
+    return fn
+
 def main(args):
     # Create a manager.
     from . import manager
@@ -158,12 +165,12 @@ def main(args):
         action="store_true",
         default=False,
         dest="plain",
-        help="Print result as plain text.")
+        help="Print result as plain text (where applicable).")
     top_parser.add_argument("--json",
         action="store_true",
         default=False,
         dest="json",
-        help="Print result as JSON.")
+        help="Print result as JSON (where applicable).")
     top_parser.add_argument("command", nargs=argparse.REMAINDER)
 
     top_args = top_parser.parse_args(args)
@@ -194,7 +201,8 @@ def main(args):
         sys.exit(2)
 
     # Print the result.
-    if top_args.json:
+    # See decorator above, alwaysjson().
+    if hasattr(fn, '_alwaysjson_') or top_args.json:
         print json.dumps(result, indent=True)
     elif top_args.plain:
         prettyprint.plainprint(result, sys.stdout)
