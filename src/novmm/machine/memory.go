@@ -3,6 +3,7 @@ package machine
 import (
     "novmm/platform"
     "sort"
+    "unsafe"
 )
 
 type MemoryType int
@@ -14,11 +15,29 @@ const (
     MemoryTypeSpecial             = 3
 )
 
+//
+// MemoryRegion --
+//
+// This is a serializable type. It is basically
+// a specification for a region of memory, but it
+// doesn't carry any information about what type
+// of region it should be (or the owner). This is
+// used to track the runtime state of the model,
+// and will be recreated from state on resume.
+//
 type MemoryRegion struct {
-    Start platform.Paddr
-    Size  uint64
+    Start platform.Paddr `json:"start"`
+    Size  uint64         `json:"size"`
 }
 
+//
+// TypedMemoryRegion --
+//
+// This is used for tracking runtime state.
+// These TypedMemoryRegion's will be created and
+// tracked in a MemoryMap (below) within the model,
+// and relate directly to runtime platform state.
+//
 type TypedMemoryRegion struct {
     MemoryRegion
     MemoryType
@@ -35,6 +54,13 @@ type TypedMemoryRegion struct {
     allocated map[uint64]uint64
 }
 
+//
+// MemoryMap --
+//
+// Our collection of current memory regions.
+//
+type MemoryMap []*TypedMemoryRegion
+
 func (region *MemoryRegion) End() platform.Paddr {
     return region.Start.After(region.Size)
 }
@@ -47,8 +73,6 @@ func (region *MemoryRegion) Overlaps(start platform.Paddr, size uint64) bool {
 func (region *MemoryRegion) Contains(start platform.Paddr, size uint64) bool {
     return region.Start <= start && region.End() >= start.After(size)
 }
-
-type MemoryMap []*TypedMemoryRegion
 
 func (memory *MemoryMap) Len() int {
     return len(*memory)
@@ -114,6 +138,13 @@ func (memory *MemoryMap) Reserve(
         return MemoryUnaligned
     }
 
+    // Ensure underlying map is aligned.
+    // This may be harder to detect later on.
+    if user != nil &&
+        uintptr(unsafe.Pointer(&user[0]))%platform.PageSize != 0 {
+        return MemoryUnaligned
+    }
+
     // Add the region.
     region := &TypedMemoryRegion{
         MemoryRegion: MemoryRegion{start, size},
@@ -139,7 +170,6 @@ func (memory *MemoryMap) Reserve(
         err = vm.MapSpecialMemory(region.Start)
     }
 
-    // We're good?
     return err
 }
 

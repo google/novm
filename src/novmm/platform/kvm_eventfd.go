@@ -1,4 +1,23 @@
+// +build linux
 package platform
+
+/*
+#include <linux/kvm.h>
+
+// IOCTL calls.
+const int IoEventFd = KVM_IOEVENTFD;
+
+// IOCTL flags.
+const int IoEventFdFlagPio = KVM_IOEVENTFD_FLAG_PIO;
+const int IoEventFdFlagDatamatch = KVM_IOEVENTFD_FLAG_DATAMATCH;
+const int IoEventFdFlagDeassign = KVM_IOEVENTFD_FLAG_DEASSIGN;
+*/
+import "C"
+
+import (
+    "syscall"
+    "unsafe"
+)
 
 type BoundEventFd struct {
 
@@ -16,6 +35,45 @@ type BoundEventFd struct {
     // Value information.
     has_value bool
     value     uint64
+}
+
+func (vm *Vm) SetEventFd(
+    eventfd *EventFd,
+    paddr Paddr,
+    size uint,
+    is_pio bool,
+    unbind bool,
+    has_value bool,
+    value uint64) error {
+
+    var ioeventfd C.struct_kvm_ioeventfd
+    ioeventfd.addr = C.__u64(paddr)
+    ioeventfd.len = C.__u32(size)
+    ioeventfd.fd = C.__s32(eventfd.Fd())
+
+    if is_pio {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagPio)
+    }
+    if unbind {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDeassign)
+    }
+    if has_value {
+        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDatamatch)
+        ioeventfd.datamatch = C.__u64(value)
+    }
+
+    // Bind / unbind the eventfd.
+    _, _, e := syscall.Syscall(
+        syscall.SYS_IOCTL,
+        uintptr(vm.fd),
+        uintptr(C.IoEventFd),
+        uintptr(unsafe.Pointer(&ioeventfd)))
+    if e != 0 {
+        return e
+    }
+
+    // Success.
+    return nil
 }
 
 func (vm *Vm) NewBoundEventFd(

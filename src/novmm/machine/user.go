@@ -6,14 +6,35 @@ import (
     "syscall"
 )
 
+//
+// UserMemorySegment --
+//
+// This maps a file offset to a segment of user memory.
+//
+type UserMemorySegment struct {
+    // The offset in the file.
+    Offset uint64 `json:"offset"`
+
+    // The segment of virtual machine memory.
+    Region MemoryRegion `json:"region"`
+}
+
+//
+// UserMemory --
+//
+// The user memory device allocates and maintains a
+// mapping of user memory to a backing file. The file
+// can be of any type (i.e. opening /dev/zero or any
+// other temporary file) and we rely on the management
+// stack to determine the best way to provide memory.
+//
 type UserMemory struct {
     BaseDevice
 
     // As laid-out.
     // This is indexed by offset in the file,
     // and each offset points to the given region.
-    // FIXME: This is not serialized correctly.
-    Map map[uint64]MemoryRegion `json:"-"`
+    Allocated []UserMemorySegment `json:"allocated"`
 
     // The offset in the file.
     Offset int64 `json:"offset"`
@@ -33,27 +54,27 @@ func (user *UserMemory) Reload(
     max_offset := uint64(0)
 
     // Place existing user memory.
-    for offset, region := range user.Map {
+    for _, segment := range user.Allocated {
 
         // Allocate it in the machine.
         err := model.Reserve(
             vm,
             user,
             MemoryTypeUser,
-            region.Start,
-            region.Size,
-            user.mmap[offset:offset+region.Size])
+            segment.Region.Start,
+            segment.Region.Size,
+            user.mmap[segment.Offset:segment.Offset+segment.Region.Size])
         if err != nil {
             return total, max_offset, err
         }
 
         // Is our max_offset up to date?
-        if offset+region.Size > max_offset {
-            max_offset = offset + region.Size
+        if segment.Offset+segment.Region.Size > max_offset {
+            max_offset = segment.Offset + segment.Region.Size
         }
 
         // Done some more.
-        total += region.Size
+        total += segment.Region.Size
     }
 
     return total, max_offset, nil
@@ -105,6 +126,13 @@ func (user *UserMemory) Layout(
                 return err
             }
 
+            // Remember this.
+            user.Allocated = append(
+                user.Allocated,
+                UserMemorySegment{
+                    start,
+                    MemoryRegion{last_top, gap}})
+
             // Move ahead in the backing store.
             start += gap
         }
@@ -135,7 +163,9 @@ func NewUserMemory(info *DeviceInfo) (Device, error) {
     // Create our user memory.
     // Nothing special, no defaults.
     user := new(UserMemory)
-    return user, user.Init(info)
+    user.Allocated = make([]UserMemorySegment, 0, 0)
+
+    return user, user.init(info)
 }
 
 func (user *UserMemory) Attach(vm *platform.Vm, model *Model) error {
@@ -161,7 +191,7 @@ func (user *UserMemory) Attach(vm *platform.Vm, model *Model) error {
             return err
         }
     } else {
-        user.mmap = make([]byte, 0)
+        return UserMemoryNotFound
     }
 
     // Layout the existing regions.

@@ -39,6 +39,7 @@ var system_map = flag.String("sysmap", "", "kernel symbol map")
 var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
 var debug = flag.Bool("debug", false, "devices start debugging")
+var freakout = flag.Bool("panic", false, "panic on fatal error")
 
 func restart(
     model *machine.Model,
@@ -82,9 +83,17 @@ func restart(
     // Note that devices and vcpus contain all stepping
     // and debugging information, so it's not necessary
     // to replay those arguments (and would be wrong).
+    vcpuinfo, err := vm.VcpuInfo()
+    if err != nil {
+        return err
+    }
+    deviceinfo, err := model.DeviceInfo(vm)
+    if err != nil {
+        return err
+    }
     state := &control.State{
-        Devices: model.DeviceInfo(),
-        Vcpus:   vm.VcpuInfo(),
+        Devices: deviceinfo,
+        Vcpus:   vcpuinfo,
     }
 
     // Encode our state in a temporary file.
@@ -141,7 +150,7 @@ func main() {
     // Create VM.
     vm, err := platform.NewVm()
     if err != nil {
-        log.Fatal(err)
+        die(err)
     }
     defer vm.Dispose()
     if *eventfds {
@@ -151,7 +160,7 @@ func main() {
     // Create the machine model.
     model, err := machine.NewModel(vm)
     if err != nil {
-        log.Fatal(err)
+        die(err)
     }
 
     // Load our machine state.
@@ -176,10 +185,10 @@ func main() {
     // Load all vcpus.
     vcpus, err := vm.LoadVcpus(state.Vcpus)
     if err != nil {
-        log.Fatal(err)
+        die(err)
     }
     if len(vcpus) == 0 {
-        log.Fatal(NoVcpus)
+        die(NoVcpus)
     }
 
     // Enable stepping if requested.
@@ -187,12 +196,6 @@ func main() {
         for _, vcpu := range vcpus {
             vcpu.SetStepping(true)
         }
-    }
-
-    // Load all devices.
-    proxy, err := model.LoadDevices(vm, state.Devices, *debug)
-    if err != nil {
-        log.Fatal(err)
     }
 
     // Remember whether or not this is a load.
@@ -215,7 +218,7 @@ func main() {
             *cmdline,
             *system_map)
         if err != nil {
-            log.Fatal(err)
+            die(err)
         }
 
         // This is a fresh boot.
@@ -252,7 +255,7 @@ func main() {
         is_load)
 
     if err != nil {
-        log.Fatal(err)
+        die(err)
     }
     go control.Serve()
 
@@ -281,7 +284,7 @@ func main() {
                 // Make sure we have control sync'ed.
                 _, err := control.Ready()
                 if err != nil {
-                    log.Fatal(err)
+                    die(err)
                 }
 
                 // This is a bit of a special case.
@@ -294,7 +297,7 @@ func main() {
 
         // Everything died?
         if vcpus_alive == 0 {
-            log.Fatal(NoVcpus)
+            die(NoVcpus)
         }
     }
 }

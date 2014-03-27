@@ -135,7 +135,7 @@ type VirtioNotification struct {
 type VirtioChannel struct {
     *VirtioDevice `json:"-"`
 
-    // Our channel number (set in Init()).
+    // Our channel number (set in init()).
     Channel uint `json:"channel"`
 
     // Our channels.
@@ -626,7 +626,7 @@ func (vchannel *VirtioChannel) SetAddress(
             return err
         }
 
-        // Initialize the ring.
+        // initialize the ring.
         C.vring_init(
             &vchannel.vring,
             C.uint(vchannel.QueueSize.Value),
@@ -644,7 +644,7 @@ func (vchannel *VirtioChannel) SetAddress(
     return nil
 }
 
-func (vchannel *VirtioChannel) Init(n uint) error {
+func (vchannel *VirtioChannel) init(n uint) error {
 
     // Save our channel number.
     vchannel.Channel = n
@@ -717,7 +717,7 @@ func NewPciVirtioDevice(
     device.PciBarSizes[0] = platform.PageSize
     device.PciBarOps[0] = &VirtioConf{virtio}
 
-    return virtio, msix_device.Init(info)
+    return virtio, msix_device.init(info)
 }
 
 type VirtioMmioConf struct {
@@ -770,7 +770,7 @@ func NewMmioVirtioDevice(
         MemoryRegion{0x10, 0xe0}: &VirtioConf{virtio},
     }
 
-    return virtio, device.Init(info)
+    return virtio, device.init(info)
 }
 
 func (virtio *VirtioDevice) SetFeatures(features uint32) {
@@ -799,7 +799,7 @@ func (virtio *VirtioDevice) Attach(vm *platform.Vm, model *Model) error {
         vchannel.VirtioDevice = virtio
 
         // Re-initialize the channel.
-        err := vchannel.Init(n)
+        err := vchannel.init(n)
         if err != nil {
             return err
         }

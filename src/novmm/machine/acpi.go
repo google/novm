@@ -20,7 +20,7 @@ type Acpi struct {
 func NewAcpi(info *DeviceInfo) (Device, error) {
     acpi := new(Acpi)
     acpi.Addr = platform.Paddr(0xf0000)
-    return acpi, acpi.Init(info)
+    return acpi, acpi.init(info)
 }
 
 func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
@@ -31,6 +31,12 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         // Create our data.
         acpi.Data = make([]byte, platform.PageSize, platform.PageSize)
     } else {
+        // Align our data.
+        // This is necessary because we map this in
+        // directly. It's possible that the data was
+        // decoded and refers to the middle of some
+        // larger array somewhere, and isn't aligned.
+        acpi.Data = platform.AlignBytes(acpi.Data)
         rebuild = false
     }
 
@@ -51,12 +57,27 @@ func (acpi *Acpi) Attach(vm *platform.Vm, model *Model) error {
         return nil
     }
 
+    // Find our APIC information.
+    // This will find the APIC device if it
+    // is attached, otherwise the MADT table
+    // will unfortunately have be a bit invalid.
+    var IOApic platform.Paddr
+    var LApic platform.Paddr
+    for _, device := range model.Devices() {
+        apic, ok := device.(*Apic)
+        if ok {
+            IOApic = apic.IOApic
+            LApic = apic.LApic
+            break
+        }
+    }
+
     // Load the MADT.
     madt_bytes := C.build_madt(
         unsafe.Pointer(&acpi.Data[0]),
-        C.__u32(vm.LApic()),
-        C.int(vm.VcpuCount()),
-        C.__u32(vm.IOApic()),
+        C.__u32(LApic),
+        C.int(len(vm.Vcpus())),
+        C.__u32(IOApic),
         C.__u32(0), // I/O APIC interrupt?
     )
     acpi.Debug("MADT %x @ %x", madt_bytes, acpi.Addr)

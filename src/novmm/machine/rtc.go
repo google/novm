@@ -71,7 +71,7 @@ type RtcData struct {
     *Rtc
 }
 
-func (rtc *Rtc) Update(alive bool) {
+func (rtc *Rtc) Tick(alive bool) {
 
     wall_clock := time.Now()
 
@@ -114,8 +114,7 @@ func (reg *RtcAddr) Write(offset uint64, size uint, value uint64) error {
 
 func (reg *RtcData) Read(offset uint64, size uint) (uint64, error) {
 
-    // Tick.
-    reg.Rtc.Update(reg.Rtc.StatusB&RtcStatusBHALT != 0)
+    reg.Rtc.Tick(reg.Rtc.StatusB&RtcStatusBHALT != 0)
 
     switch reg.Rtc.Addr {
     case RtcSecondAlarm:
@@ -223,7 +222,7 @@ func NewRtc(info *DeviceInfo) (Device, error) {
         MemoryRegion{1, 1}: &RtcData{Rtc: rtc},
     }
 
-    return rtc, rtc.Init(info)
+    return rtc, rtc.init(info)
 }
 
 func (rtc *Rtc) Attach(vm *platform.Vm, model *Model) error {
@@ -231,9 +230,9 @@ func (rtc *Rtc) Attach(vm *platform.Vm, model *Model) error {
     // Update the time.
     var defaultTime time.Time
     if rtc.Now != defaultTime {
-        rtc.Update(false)
+        rtc.Tick(false)
     } else {
-        rtc.Update(true)
+        rtc.Tick(true)
     }
 
     return rtc.PioDevice.Attach(vm, model)

@@ -77,12 +77,39 @@ func (model *Model) Devices() []Device {
     return model.devices
 }
 
-func (model *Model) DeviceInfo() []DeviceInfo {
+func (model *Model) Sync(vm *platform.Vm) error {
+
+    for _, device := range model.devices {
+        // Ensure this device is up-to-date.
+        err := device.Sync(vm)
+        if err != nil {
+            return err
+        }
+    }
+
+    // All good.
+    return nil
+}
+
+func (model *Model) DeviceInfo(vm *platform.Vm) ([]DeviceInfo, error) {
+
+    // Sychronize all devices.
+    err := model.Sync(vm)
+    if err != nil {
+        return nil, err
+    }
 
     devices := make([]DeviceInfo, 0, len(model.devices))
     for _, device := range model.devices {
-        devices = append(devices, NewDeviceInfo(device))
+
+        // Get the deviceinfo.
+        deviceinfo, err := NewDeviceInfo(device)
+        if err != nil {
+            return nil, err
+        }
+
+        devices = append(devices, deviceinfo)
     }
 
-    return devices
+    return devices, nil
 }

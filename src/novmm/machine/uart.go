@@ -167,7 +167,7 @@ func NewUart(info *DeviceInfo) (Device, error) {
     uart.Dll.Value = divisor
     uart.Dlh.Value = divisor >> 16
 
-    return uart, uart.Init(info)
+    return uart, uart.init(info)
 }
 
 func (uart *Uart) getInterruptStatus() uint8 {

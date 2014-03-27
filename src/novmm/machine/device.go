@@ -25,6 +25,7 @@ type Device interface {
     MmioHandlers() IoHandlers
 
     Attach(vm *platform.Vm, model *Model) error
+    Sync(vm *platform.Vm) error
 
     Interrupt() error
 
@@ -33,7 +34,7 @@ type Device interface {
     SetDebugging(debug bool)
 }
 
-func (device *BaseDevice) Init(info *DeviceInfo) error {
+func (device *BaseDevice) init(info *DeviceInfo) error {
     // Save our original device info.
     // This isn't structural (hence no export).
     device.info = info
@@ -71,6 +72,10 @@ func (device *BaseDevice) SetDebugging(debug bool) {
 }
 
 func (device *BaseDevice) Attach(vm *platform.Vm, model *Model) error {
+    return nil
+}
+
+func (device *BaseDevice) Sync(vm *platform.Vm) error {
     return nil
 }
 

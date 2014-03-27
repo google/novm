@@ -134,12 +134,22 @@ type PciBus struct {
     // On bus devices.
     devices []*PciDevice
 
+    // Our pci hole in memory.
+    Hole MemoryRegion `json:"hole"`
+
+    // Our configuration address.
+    Addr Register `json:"config-address"`
+
+    // Our computed offset.
+    // This isn't serialized, since it will be
+    // set on every run of selectLast().
+    offset uint64
+
+    // Our reserved high-mem region.
+    MemoryRegion platform.Paddr `json:"reserved"`
+
     // The last device selected.
     // See below in PciConfAddr.Read().
-    Addr   uint64 `json:"config-address"`
-    Offset uint64 `json:"config-offset"`
-
-    // The device selected.
     last *PciDevice
 
     // Refresh to the model flush().
@@ -158,25 +168,24 @@ type PciConfData struct {
 }
 
 func (reg *PciConfAddr) Read(offset uint64, size uint) (uint64, error) {
-    return reg.PciBus.Addr, nil
+    return reg.PciBus.Addr.Read(offset, size)
 }
 
 func (reg *PciConfAddr) Write(offset uint64, size uint, value uint64) error {
-    // Save the address.
-    reg.PciBus.Addr = value
-    return reg.PciBus.SelectLast()
+    defer reg.PciBus.selectLast()
+    return reg.PciBus.Addr.Write(offset, size, value)
 }
 
-func (pcibus *PciBus) SelectLast() error {
+func (pcibus *PciBus) selectLast() error {
 
     // Load our address.
-    value := pcibus.Addr
+    value := pcibus.Addr.Value
 
     // Try to select the device.
     bus := (value >> 16) & 0x7fff
     device := (value >> 11) & 0x1f
     function := (value >> 8) & 0x7
-    pcibus.Offset = value & 0xff
+    pcibus.offset = value & 0xff
 
     if bus != 0 {
         pcibus.last = nil
@@ -203,7 +212,7 @@ func (reg *PciConfData) Read(offset uint64, size uint) (uint64, error) {
         return math.MaxUint64, nil
     }
 
-    offset += (reg.PciBus.Offset & 0xfc)
+    offset += (reg.PciBus.offset & 0xfc)
 
     // Is this a capability?
     for _, capability := range reg.PciBus.last.Capabilities {
@@ -242,7 +251,7 @@ func (reg *PciConfData) Write(offset uint64, size uint, value uint64) error {
         return nil
     }
 
-    offset += (reg.PciBus.Offset & 0xfc)
+    offset += (reg.PciBus.offset & 0xfc)
 
     // Is this a capability?
     for _, capability := range reg.PciBus.last.Capabilities {
@@ -295,7 +304,7 @@ func NewPciDevice(
     device.PciBarSizes = make(map[uint]uint32)
     device.PciBarOps = make(map[uint]IoOperations)
     device.Capabilities = make(PciCapabilityMap)
-    device.Init(info)
+    device.init(info)
 
     // Set our configuration space.
     device.Config.Set16(PciConfigOffsetVendorId, uint16(vendor_id))
@@ -344,14 +353,34 @@ func NewPciBus(info *DeviceInfo) (Device, error) {
         MemoryRegion{0xcfc, 4}: &PciConfData{PciBus: bus},
     }
 
+    // Sensible default.
+    // We reserve our memory hole from 256mb below 4gb to the IOApic.
+    bus.Hole.Start = 0xf0000000
+    bus.Hole.Size = uint64(platform.IOApic() - bus.Hole.Start)
+
     // Return our bus and device.
-    return bus, bus.Init(info)
+    return bus, bus.init(info)
 }
 
 func (pcibus *PciBus) Attach(vm *platform.Vm, model *Model) error {
 
+    // This is so operating system is able to map
+    // pci BARs within a 32-bit range. This is also
+    // necessary because the LAPICs and IOAPICs are
+    // mapped here, and it should be reserved.
+    err := model.Reserve(
+        vm,
+        pcibus,
+        MemoryTypeReserved,
+        pcibus.Hole.Start,
+        pcibus.Hole.Size,
+        nil)
+    if err != nil {
+        return err
+    }
+
     // Ensure we have a device.
-    pcibus.SelectLast()
+    pcibus.selectLast()
 
     // Save the flush function.
     pcibus.flush = func() error { return model.flush() }

@@ -195,6 +195,8 @@ class NovmManager(object):
             # Always add basic devices.
             devices.append(basic.Bios())
             devices.append(basic.Acpi())
+            devices.append(basic.Apic())
+            devices.append(basic.Pit())
 
             # Add the kernel arguments.
             # (Including the packed modules).
@@ -306,7 +308,12 @@ class NovmManager(object):
             args.extend(["-controlfd=%d" % ctrl.fd()])
 
             # Construct our cmdline.
-            args.append("-cmdline=%s %s" % (" ".join([
+            if cmdline is None:
+                cmdline = ""
+            else:
+                cmdline = " " + cmdline
+
+            args.append("-cmdline=%s%s" % (" ".join([
                 dev.cmdline()
                 for dev in devices
                 if dev.cmdline() is not None
