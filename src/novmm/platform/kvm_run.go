@@ -49,22 +49,26 @@ func (vcpu *Vcpu) initRunInfo() error {
 }
 
 func (vcpu *Vcpu) Run() error {
-    // Make sure our registers are flushed.
-    err := vcpu.flushRegs()
-    if err != nil {
-        return err
-    }
-    err = vcpu.flushSRegs()
-    if err != nil {
-        return err
-    }
-
     for {
+        // Make sure our registers are flushed.
+        // This will also refresh registers after we
+        // execute but are interrupted (i.e. EINTR).
+        err := vcpu.flushRegs()
+        if err != nil {
+            return err
+        }
+        err = vcpu.flushSRegs()
+        if err != nil {
+            return err
+        }
+
         // Ensure we can run.
+        //
         // For exact semantics, see Pause() and Unpause().
         // NOTE: By default, we are always "running". We are
         // only not running when we arrive at this point in
         // the pipeline and are waiting on the resume_event.
+        //
         // This is because we want to ensure that our registers
         // have been flushed and all that devices are up-to-date
         // before we can declare a VCPU as "paused".
