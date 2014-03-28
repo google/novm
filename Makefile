@@ -18,13 +18,26 @@ endif
 ifeq ($(ARCH),x86_64)
 DEB_ARCH := amd64
 RPM_ARCH := x86_64
+KERNEL_ARCH := x86
 else
     ifeq ($(ARCH),i686)
 DEB_ARCH := i386
 RPM_ARCH := i386
+KERNEL_ARCH := x86
     else
 $(error Unknown arch "$(ARCH)".)
     endif
+endif
+
+ifeq ($(KERNEL),y)
+# Figure out our kernel path.
+# You can override all these settings, but
+# nothing will be added unless you pass KERNEL=y.
+KERNEL_RELEASE ?= $(shell uname -r)
+KERNEL_SOURCE ?= /lib/modules/$(KERNEL_RELEASE)/build
+KERNEL_INCLUDE ?= $(KERNEL_SOURCE)/include/uapi
+KERNEL_ARCH_INCLUDE ?= $(KERNEL_SOURCE)/arch/$(KERNEL_ARCH)/include/uapi
+CGO_CFLAGS ?= -I$(KERNEL_INCLUDE) -I$(KERNEL_ARCH_INCLUDE)
 endif
 
 # Our default target.
@@ -32,7 +45,8 @@ all: dist
 .PHONY: all
 
 # Our GO source build command.
-go_build = @GOPATH=$(CURDIR) $(1)
+# This includes our kernel include path (if set).
+go_build = @GOPATH=$(CURDIR) CGO_CFLAGS="$(CGO_CFLAGS)" $(1)
 
 ARCH ?= $(shell arch)
 go-build: go-fmt go-test
