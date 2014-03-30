@@ -6,6 +6,7 @@ package platform
 import "C"
 
 import (
+    "novmm/utils"
     "sync"
     "syscall"
 )
@@ -86,7 +87,11 @@ func (vcpu *Vcpu) Run() error {
         vcpu.RunInfo.lock.Unlock()
 
         // Execute our run ioctl.
-        e := syscall.Errno(C.kvm_run(C.int(vcpu.fd), &vcpu.RunInfo.info))
+        rc := C.kvm_run(
+            C.int(vcpu.fd),
+            C.int(utils.SigVcpuInt),
+            &vcpu.RunInfo.info)
+        e := syscall.Errno(rc)
 
         if e == syscall.EINTR || e == syscall.EAGAIN {
             continue
@@ -123,7 +128,10 @@ func (vcpu *Vcpu) Pause(manual bool) error {
     if vcpu.is_running {
         // Only the first caller need interrupt.
         if manual || vcpu.RunInfo.paused == 1 {
-            e := C.kvm_run_interrupt(C.int(vcpu.fd), &vcpu.RunInfo.info)
+            e := C.kvm_run_interrupt(
+                C.int(vcpu.fd),
+                C.int(utils.SigVcpuInt),
+                &vcpu.RunInfo.info)
             if e != 0 {
                 return syscall.Errno(e)
             }

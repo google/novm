@@ -39,7 +39,7 @@ int kvm_run_init(int vcpufd, struct kvm_run_info *info) {
     return rval < 0 ? errno : 0;
 }
 
-int kvm_run(int vcpufd, struct kvm_run_info *info) {
+int kvm_run(int vcpufd, int sig, struct kvm_run_info *info) {
     int rval = 0;
     sigset_t newset;
     sigset_t oldset;
@@ -54,9 +54,9 @@ int kvm_run(int vcpufd, struct kvm_run_info *info) {
         return EINTR;
     }
 
-    /* Block SIGUSR1 temporarily. */
+    /* Block our interrupt signal temporarily. */
     sigemptyset(&newset);
-    sigaddset(&newset, SIGUSR1);
+    sigaddset(&newset, sig);
     if (pthread_sigmask(SIG_BLOCK, &newset, &oldset) < 0) {
         pthread_mutex_unlock(&info->lock);
         return errno;
@@ -85,7 +85,7 @@ int kvm_run(int vcpufd, struct kvm_run_info *info) {
     /* Note that we are no longer running.
      * It's quite possible that prior to acquiring
      * the lock above, someone ma hit us with another
-     * SIGUSR1. This is okay, it will be consumed after
+     * signal. This is okay, it will be consumed after
      * we unblock the signal block (harmlessly). */
     info->running = 0;
     info->cancel = 0;
@@ -93,7 +93,7 @@ int kvm_run(int vcpufd, struct kvm_run_info *info) {
     /* Done with clearing running & cancel. */
     pthread_mutex_unlock(&info->lock);
 
-    /* Unblock the SIGUSR1 signal. */
+    /* Unblock the interrupt signal signal. */
     if (pthread_sigmask(SIG_SETMASK, &oldset, NULL) < 0) {
         return rval != 0 ? rval : errno;
     }
@@ -101,7 +101,7 @@ int kvm_run(int vcpufd, struct kvm_run_info *info) {
     return rval;
 }
 
-int kvm_run_interrupt(int vcpufd, struct kvm_run_info *info) {
+int kvm_run_interrupt(int vcpufd, int sig, struct kvm_run_info *info) {
     (void)vcpufd;
 
     /* Acquire our lock. */
@@ -109,7 +109,7 @@ int kvm_run_interrupt(int vcpufd, struct kvm_run_info *info) {
 
     /* Is this thread running? */
     if (info->running) {
-        pthread_kill(info->tid, SIGUSR1);
+        pthread_kill(info->tid, sig);
     } else {
         info->cancel = 1;
     }

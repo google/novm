@@ -27,7 +27,7 @@ int kvm_run_init(int vcpufd, struct kvm_run_info *info);
 int kvm_run_prep(int vcpufd, struct kvm_run_info *info);
 
 /* Save our tid and enter guest mode. */
-int kvm_run(int vcpufd, struct kvm_run_info *info);
+int kvm_run(int vcpufd, int sig, struct kvm_run_info *info);
 
 /* Interrupt the running vcpu. */
-int kvm_run_interrupt(int vcpufd, struct kvm_run_info *info);
+int kvm_run_interrupt(int vcpufd, int sig, struct kvm_run_info *info);

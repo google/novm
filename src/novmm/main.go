@@ -40,11 +40,13 @@ var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
 var debug = flag.Bool("debug", false, "devices start debugging")
 var paused = flag.Bool("paused", false, "start with model and vcpus paused")
+var stop = flag.Bool("stop", false, "wait for a SIGCONT before running")
 
 func restart(
     model *machine.Model,
     vm *platform.Vm,
-    is_tracing bool) error {
+    is_tracing bool,
+    stop bool) error {
 
     // Get our binary.
     bin, err := os.Readlink("/proc/self/exe")
@@ -112,14 +114,35 @@ func restart(
         fmt.Sprintf("-eventfds=%t", *eventfds),
         fmt.Sprintf("-trace=%t", is_tracing),
         fmt.Sprintf("-paused=%t", *paused),
+        fmt.Sprintf("-stop=%t", stop),
     }
 
     return syscall.Exec(bin, cmd, os.Environ())
 }
 
 func main() {
+    // Start processing signals.
+    // Our setup can take a little while, so we
+    // want to ensure we aren't using the default
+    // handlers from the beginning.
+    signals := make(chan os.Signal, 1)
+    signal.Notify(signals)
+
     // Parse all command line options.
     flag.Parse()
+
+    // Are we doing a special restart?
+    // This will STOP the current process, and
+    // wait for a CONT signal before resuming.
+    // The STOP signal is not maskable, so the
+    // runtime isn't capable of preventing this.
+    // The whole point of this restart is as follows:
+    //   * killall -USR2 novmm
+    //   * upgrade kvm
+    //   * killall -CONT novmm
+    if *stop {
+        syscall.Kill(syscall.Getpid(), syscall.SIGSTOP)
+    }
 
     // Create VM.
     vm, err := platform.NewVm()
@@ -260,8 +283,6 @@ func main() {
     // appropriate device state and vcpu state. This is essentially
     // a live upgrade (i.e. the binary has been replaced, we rerun).
     vcpus_alive := len(vcpus)
-    signals := make(chan os.Signal, 1)
-    signal.Notify(signals, syscall.SIGTERM, syscall.SIGHUP)
 
     for {
         select {
@@ -272,11 +293,14 @@ func main() {
             }
         case sig := <-signals:
             switch sig {
-            case syscall.SIGTERM:
+            case utils.SigShutdown:
                 log.Printf("Shutdown.")
                 os.Exit(0)
 
-            case syscall.SIGHUP:
+            case utils.SigRestart:
+                fallthrough
+            case utils.SigSpecialRestart:
+
                 // Make sure we have control sync'ed.
                 _, err := control.Ready()
                 if err != nil {
@@ -286,7 +310,11 @@ func main() {
                 // This is a bit of a special case.
                 // We don't log a fatal message here,
                 // but rather unpause and keep going.
-                err = restart(model, vm, tracer.IsEnabled())
+                err = restart(
+                    model,
+                    vm,
+                    tracer.IsEnabled(),
+                    sig == utils.SigSpecialRestart)
                 log.Printf("Restart failed: %s", err.Error())
             }
         }
