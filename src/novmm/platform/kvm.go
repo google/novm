@@ -152,3 +152,41 @@ func (vm *Vm) VcpuInfo() ([]VcpuInfo, error) {
 
     return vcpus, nil
 }
+
+func (vm *Vm) Pause(manual bool) error {
+
+    // Pause all vcpus.
+    for i, vcpu := range vm.vcpus {
+        err := vcpu.Pause(manual)
+        if err != nil && err != AlreadyPaused {
+            // Rollback.
+            // NOTE: Start with the previous.
+            for i -= 1; i >= 0; i -= 1 {
+                vm.vcpus[i].Unpause(manual)
+            }
+            return err
+        }
+    }
+
+    // Done.
+    return nil
+}
+
+func (vm *Vm) Unpause(manual bool) error {
+
+    // Unpause all vcpus.
+    for i, vcpu := range vm.vcpus {
+        err := vcpu.Unpause(manual)
+        if err != nil && err != NotPaused {
+            // Rollback.
+            // NOTE: Start with the previous.
+            for i -= 1; i >= 0; i -= 1 {
+                vm.vcpus[i].Pause(manual)
+            }
+            return err
+        }
+    }
+
+    // Done.
+    return nil
+}

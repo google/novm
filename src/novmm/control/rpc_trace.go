@@ -9,11 +9,11 @@ type TraceSettings struct {
     Enable bool `json:"enable"`
 }
 
-func (control *Control) Trace(settings *TraceSettings, nop *Nop) error {
+func (rpc *Rpc) Trace(settings *TraceSettings, nop *Nop) error {
     if settings.Enable {
-        control.tracer.Enable()
+        rpc.tracer.Enable()
     } else {
-        control.tracer.Disable()
+        rpc.tracer.Disable()
     }
 
     return nil

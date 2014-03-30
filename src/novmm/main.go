@@ -67,33 +67,10 @@ func restart(
         }
     }
 
-    // Pause all vcpus.
-    // (If we have to exit this function, we
-    // ensure that the Vcpus will be unpaused).
-    vcpus := vm.Vcpus()
-    for _, vcpu := range vcpus {
-        err := vcpu.Pause(false)
-        if err != nil {
-            return err
-        }
-        defer vcpu.Unpause(false)
-    }
-
-    // Collect our device and vcpu data.
-    // Note that devices and vcpus contain all stepping
-    // and debugging information, so it's not necessary
-    // to replay those arguments (and would be wrong).
-    vcpuinfo, err := vm.VcpuInfo()
+    // Create our state.
+    state, err := control.SaveState(vm, model)
     if err != nil {
         return err
-    }
-    deviceinfo, err := model.DeviceInfo(vm)
-    if err != nil {
-        return err
-    }
-    state := &control.State{
-        Devices: deviceinfo,
-        Vcpus:   vcpuinfo,
     }
 
     // Encode our state in a temporary file.

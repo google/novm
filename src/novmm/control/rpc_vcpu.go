@@ -19,9 +19,9 @@ type VcpuSettings struct {
     Paused bool `json:"paused"`
 }
 
-func (control *Control) Vcpu(settings *VcpuSettings, nop *Nop) error {
+func (rpc *Rpc) Vcpu(settings *VcpuSettings, nop *Nop) error {
     // A valid vcpu?
-    vcpus := control.vm.Vcpus()
+    vcpus := rpc.vm.Vcpus()
     if settings.Id >= len(vcpus) {
         return syscall.EINVAL
     }

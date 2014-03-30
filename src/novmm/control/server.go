@@ -21,17 +21,11 @@ type Control struct {
     // Should this instance use a real init?
     real_init bool
 
-    // Our device model.
-    model *machine.Model
-
-    // Our underlying Vm object.
-    vm  *platform.Vm
-
-    // Our tracer.
-    tracer *loader.Tracer
-
     // Our proxy to the in-guest agent.
     proxy machine.Proxy
+
+    // Our rpc server.
+    rpc *Rpc
 
     // Our bound client (to the in-guest agent).
     // NOTE: We have this setup as a lazy function
@@ -190,7 +184,7 @@ func (control *Control) Serve() {
 
     // Bind our rpc server.
     server := rpc.NewServer()
-    server.Register(control)
+    server.Register(control.rpc)
 
     for {
         // Accept clients.
@@ -219,10 +213,8 @@ func NewControl(
     control := new(Control)
     control.control_fd = control_fd
     control.real_init = real_init
-    control.model = model
-    control.vm = vm
-    control.tracer = tracer
     control.proxy = proxy
+    control.rpc = NewRpc(model, vm, tracer)
 
     // Start our barrier.
     control.client_res = make(chan error)

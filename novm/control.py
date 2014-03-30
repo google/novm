@@ -60,7 +60,7 @@ class Control(object):
         # there's a user other than the CLI.
         rpc_uuid = str(uuid.uuid4())
         rpc_cmd = {
-            "method": "Control.%s" % name.title(),
+            "method": "Rpc.%s" % name.title(),
             "params": [kwargs],
             "id": rpc_uuid,
         }

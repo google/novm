@@ -16,14 +16,14 @@ type DeviceSettings struct {
     Debug bool `json:"debug"`
 }
 
-func (control *Control) Device(settings *DeviceSettings, nop *Nop) error {
+func (rpc *Rpc) Device(settings *DeviceSettings, nop *Nop) error {
 
     rp, err := regexp.Compile(settings.Name)
     if err != nil {
         return err
     }
 
-    for _, device := range control.model.Devices() {
+    for _, device := range rpc.model.Devices() {
         if rp.MatchString(device.Name()) {
             device.SetDebugging(settings.Debug)
         }
