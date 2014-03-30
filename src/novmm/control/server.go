@@ -216,7 +216,7 @@ func NewControl(
     control.rpc = NewRpc(model, vm, tracer)
 
     // Start our barrier.
-    control.client_res = make(chan error)
+    control.client_res = make(chan error, 1)
     if is_load {
         go control.init()
     } else {
