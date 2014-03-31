@@ -9,12 +9,6 @@ import thread
 import zipfile
 import traceback
 
-def squash_signal(*args):
-    pass
-
-def raise_exception(*args):
-    thread.exit()
-
 def cleanup(fcn=None, *args, **kwargs):
     # We setup a safe procedure here to ensure that the
     # child will receive a SIGTERM when the parent exits.
@@ -30,58 +24,99 @@ def cleanup(fcn=None, *args, **kwargs):
         child_pid = 0
         parent_pid = os.getppid()
     else:
+        # Open a pipe to notify the parent when we're
+        # ready to handle parent death and run the fcn.
+        rpipe, wpipe = os.pipe()
+
         # Fork a child process.
         # This child process will execute the given code
         # when its parent dies. It's normally used inline.
         child_pid = os.fork()
         parent_pid = os.getppid()
 
-    if child_pid == 0:
-        # Cause a TERM to be handled as an exit.
-        # We don't have multiple threads here, so we're
-        # guaranteed that this will be handled in this frame.
-        if fcn is not None:
-            signal.signal(signal.SIGINT, squash_signal)
-            signal.signal(signal.SIGTERM, raise_exception)
+        if child_pid == 0:
+            os.close(rpipe)
+        else:
+            # Wait for the child to finish setup.
+            # When it writes to its end of the pipe,
+            # we know that it is prepared to handle
+            # parent death and run the function.
+            os.close(wpipe)
+            os.read(rpipe, 1)
+            os.close(rpipe)
 
+    if child_pid == 0:
         # Set P_SETSIGDEATH to SIGTERM.
         libc.prctl(1, signal.SIGTERM)
 
-        try:
-            # Did we catch a race above, where we've
-            # missing the re-parenting to init?
-            if os.getppid() != parent_pid:
-                os.kill(os.getpid(), signal.SIGTERM)
+        # Did we catch a race above, where we've
+        # missed the re-parenting to init?
+        if os.getppid() != parent_pid:
+            os.kill(os.getpid(), signal.SIGTERM)
 
-            # Are we finished?
-            # In the case of not having a function to
-            # execute, we simply return control. This is
-            # a pre-exec hook for subprocess, for eaxample.
-            if fcn is None:
-                return
+        # Are we finished?
+        # In the case of not having a function to
+        # execute, we simply return control. This is
+        # a pre-exec hook for subprocess, for eaxample.
+        if fcn is None:
+            return
 
-            # Close descriptors.
-            for fd in range(3, os.sysconf("SC_OPEN_MAX")):
-                try:
+        # Close descriptors.
+        # (Make sure we don't close our pipe).
+        for fd in range(3, os.sysconf("SC_OPEN_MAX")):
+            try:
+                if fd != wpipe:
                     os.close(fd)
-                except OSError:
-                    pass
+            except OSError:
+                pass
 
-            # Wait for the exit.
-            while os.getppid() == parent_pid:
+        # Eat a signal.
+        def squash(*args):
+            pass
+
+        # Suppress SIGINT. We'll get it when the user
+        # hits Ctrl-C, which may be before our parent dies.
+        signal.signal(signal.SIGINT, squash)
+
+        def interrupt(*args):
+            # Temporarily suppress SIGTERM. We'll enable it
+            # once we are ready to wait (and recheck races).
+            signal.signal(signal.SIGTERM, squash)
+            thread.exit()
+
+        # Temporarily supress SIGTERM, we do this until
+        # it's re-enabled in the main wait loop below.
+        signal.signal(signal.SIGTERM, squash)
+
+        # Notify that we are ready to go.
+        os.write(wpipe, 'o')
+        os.close(wpipe)
+
+        while True:
+            try:
+                # Get ready to receive our SIGTERM.
+                # NOTE: When we receive the exception,
+                # it will automatically be suppressed.
+                signal.signal(signal.SIGTERM, interrupt)
+
+                # Catch our race condition.
+                if os.getppid() != parent_pid:
+                    break
+
+                # Wait for a signal.
                 signal.pause()
+            except (SystemExit, KeyboardInterrupt):
+                continue
 
-        except (SystemExit, KeyboardInterrupt):
-            if fcn is not None:
-                try:
-                    fcn(*args, **kwargs)
-                except:
-                    # We eat all exceptions from the
-                    # cleanup function. If the user wants
-                    # to generate any output, they may --
-                    # however by default we silence it.
-                    pass
-            os._exit(0)
+        try:
+            fcn(*args, **kwargs)
+        except:
+            # We eat all exceptions from the
+            # cleanup function. If the user wants
+            # to generate any output, they may --
+            # however by default we silence it.
+            pass
+        os._exit(0)
 
 def packdir(path, output, include=None, exclude=None):
     if include is None:
