@@ -5,16 +5,15 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int SetUserMemoryRegion = KVM_SET_USER_MEMORY_REGION;
-const int Translate = KVM_TRANSLATE;
+const int IoctlSetUserMemoryRegion = KVM_SET_USER_MEMORY_REGION;
+const int IoctlTranslate = KVM_TRANSLATE;
 
 // IOCTL flags.
-const int MemLogDirtyPages = KVM_MEM_LOG_DIRTY_PAGES;
+const int IoctlFlagMemLogDirtyPages = KVM_MEM_LOG_DIRTY_PAGES;
 */
 import "C"
 
 import (
-    "log"
     "syscall"
     "unsafe"
 )
@@ -37,15 +36,10 @@ func (vm *Vm) MapUserMemory(
     region.userspace_addr = C.__u64(uintptr(unsafe.Pointer(&mmap[0])))
 
     // Execute the ioctl.
-    log.Printf(
-        "kvm: creating %x byte memory region [%x,%x]...",
-        size,
-        start,
-        uint64(start)+size-1)
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.SetUserMemoryRegion),
+        uintptr(C.IoctlSetUserMemoryRegion),
         uintptr(unsafe.Pointer(&region)))
     if e != 0 {
         return e
@@ -73,7 +67,7 @@ func (vcpu *Vcpu) Translate(
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.Translate),
+        uintptr(C.IoctlTranslate),
         uintptr(unsafe.Pointer(&translation)))
     if e != 0 {
         return Paddr(0), false, false, false, e

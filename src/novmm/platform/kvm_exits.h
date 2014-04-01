@@ -17,6 +17,7 @@ extern const int ExitReasonIo;
 extern const int ExitReasonInternalError;
 extern const int ExitReasonDebug;
 extern const int ExitReasonException;
+extern const int ExitReasonShutdown;
 
 void* handle_exit_mmio(struct kvm_run* kvm);
 void* handle_exit_io(struct kvm_run* kvm);

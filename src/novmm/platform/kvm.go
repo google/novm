@@ -5,14 +5,13 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int GetApiVersion = KVM_GET_API_VERSION;
-const int CreateVm = KVM_CREATE_VM;
-const int GetVcpuMmapSize = KVM_GET_VCPU_MMAP_SIZE;
+const int IoctlGetApiVersion = KVM_GET_API_VERSION;
+const int IoctlCreateVm = KVM_CREATE_VM;
+const int IoctlGetVcpuMmapSize = KVM_GET_VCPU_MMAP_SIZE;
 */
 import "C"
 
 import (
-    "log"
     "syscall"
 )
 
@@ -52,7 +51,7 @@ func getMmapSize(fd int) (int, error) {
     r, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(fd),
-        uintptr(C.GetVcpuMmapSize),
+        uintptr(C.IoctlGetVcpuMmapSize),
         0)
     if e != 0 {
         return 0, e
@@ -71,7 +70,7 @@ func NewVm() (*Vm, error) {
     version, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(fd),
-        uintptr(C.GetApiVersion),
+        uintptr(C.IoctlGetApiVersion),
         0)
     if version != 12 || e != 0 {
         return nil, e
@@ -107,7 +106,7 @@ func NewVm() (*Vm, error) {
     vmfd, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(fd),
-        uintptr(C.CreateVm),
+        uintptr(C.IoctlCreateVm),
         0)
     if e != 0 {
         return nil, e
@@ -118,7 +117,6 @@ func NewVm() (*Vm, error) {
     syscall.CloseOnExec(int(vmfd))
 
     // Prepare our VM object.
-    log.Print("kvm: VM created.")
     vm := &Vm{
         fd:        int(vmfd),
         vcpus:     make([]*Vcpu, 0, 0),
@@ -131,6 +129,11 @@ func NewVm() (*Vm, error) {
 }
 
 func (vm *Vm) Dispose() error {
+
+    for _, vcpu := range vm.vcpus {
+        vcpu.Dispose()
+    }
+
     return syscall.Close(vm.fd)
 }
 
@@ -139,6 +142,12 @@ func (vm *Vm) Vcpus() []*Vcpu {
 }
 
 func (vm *Vm) VcpuInfo() ([]VcpuInfo, error) {
+
+    err := vm.Pause(false)
+    if err != nil {
+        return nil, err
+    }
+    defer vm.Unpause(false)
 
     vcpus := make([]VcpuInfo, 0, len(vm.vcpus))
     for _, vcpu := range vm.vcpus {

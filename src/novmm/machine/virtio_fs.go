@@ -73,8 +73,8 @@ func (fs *VirtioFsDevice) run() error {
 func setupFs(device *VirtioDevice) (Device, error) {
 
     // Create our channel (requests).
-    device.Channels[0] = device.NewVirtioChannel(512)
-    device.Channels[1] = device.NewVirtioChannel(512)
+    device.Channels[0] = NewVirtioChannel(0, 512)
+    device.Channels[1] = NewVirtioChannel(1, 512)
 
     // Initialize our FS.
     fs := new(VirtioFsDevice)

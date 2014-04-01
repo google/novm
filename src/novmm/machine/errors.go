@@ -5,6 +5,10 @@ import (
     "fmt"
 )
 
+// Basic errors.
+var DeviceAlreadyPaused = errors.New("Device already paused!")
+var DeviceNotPaused = errors.New("Device not paused!")
+
 // Memory allocation / layout errors.
 var MemoryConflict = errors.New("Memory regions conflict!")
 var MemoryNotFound = errors.New("Memory region not found!")

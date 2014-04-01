@@ -5,26 +5,22 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int CheckExtension = KVM_CHECK_EXTENSION;
+const int IoctlCheckExtension = KVM_CHECK_EXTENSION;
 
 // Capabilities (extensions).
 const int CapUserMem = KVM_CAP_USER_MEMORY;
+const int CapSetIdentityMapAddr = KVM_CAP_SET_IDENTITY_MAP_ADDR;
 const int CapIrqChip = KVM_CAP_IRQCHIP;
 const int CapIoFd = KVM_CAP_IOEVENTFD;
 const int CapIrqFd = KVM_CAP_IRQFD;
 const int CapPit2 = KVM_CAP_PIT2;
 const int CapPitState2 = KVM_CAP_PIT_STATE2;
-const int CapGuestDebug = KVM_CAP_SET_GUEST_DEBUG;
 const int CapCpuid = KVM_CAP_EXT_CPUID;
 const int CapSignalMsi = KVM_CAP_SIGNAL_MSI;
-
-// NOTE: Not really generally available yet.
-// This is a pretty new feature, but once it's available
-// it surely will allow rearchitecting some of the MMIO-based
-// devices to operate more efficently (as the guest will only
-// trap out on WRITEs, and not on READs).
-// const int MemReadOnly = KVM_MEM_READONLY;
-// const int CapReadOnlyMem = KVM_CAP_READONLY_MEM;
+const int CapVcpuEvents = KVM_CAP_VCPU_EVENTS;
+const int CapAdjustClock = KVM_CAP_ADJUST_CLOCK;
+const int CapXSave = KVM_CAP_XSAVE;
+const int CapXcrs = KVM_CAP_XCRS;
 */
 import "C"
 
@@ -41,26 +37,29 @@ func (capability *kvmCapability) Error() string {
     return "Missing capability: " + capability.name
 }
 
+//
+// Our required capabilities.
+//
+// Many of these are actually optional, but none
+// of the plumbing has been done to gracefully fail
+// when they are not available. For the time being
+// development is focused on legacy-free environments,
+// so we can split this out when it's necessary later.
+//
 var requiredCapabilities = []kvmCapability{
     kvmCapability{"User Memory", uintptr(C.CapUserMem)},
+    kvmCapability{"Identity Map", uintptr(C.CapSetIdentityMapAddr)},
     kvmCapability{"IRQ Chip", uintptr(C.CapIrqChip)},
     kvmCapability{"IO Event FD", uintptr(C.CapIoFd)},
     kvmCapability{"IRQ Event FD", uintptr(C.CapIrqFd)},
     kvmCapability{"PIT2", uintptr(C.CapPit2)},
     kvmCapability{"PITSTATE2", uintptr(C.CapPitState2)},
+    kvmCapability{"Clock", uintptr(C.CapAdjustClock)},
     kvmCapability{"CPUID", uintptr(C.CapCpuid)},
     kvmCapability{"MSI", uintptr(C.CapSignalMsi)},
-
-    // It does seem to be the case that this capability
-    // is not advertised correctly. On my kernel (3.11),
-    // it supports this ioctl but yet claims this capability
-    // is not available.
-    // In any case, this isn't necessary functionality,
-    // but the call to SetSingleStep() may fail.
-    // kvmCapability{"Guest debug", uintptr(C.CapGuestDebug)},
-
-    // See NOTE above.
-    // kvmCapability{"Read-only Memory", uintptr(C.CapReadOnlyMem)},
+    kvmCapability{"VCPU Events", uintptr(C.CapVcpuEvents)},
+    kvmCapability{"XSAVE", uintptr(C.CapXSave)},
+    kvmCapability{"XCRS", uintptr(C.CapXcrs)},
 }
 
 func checkCapability(
@@ -70,7 +69,7 @@ func checkCapability(
     r, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(fd),
-        uintptr(C.CheckExtension),
+        uintptr(C.IoctlCheckExtension),
         capability.number)
     if r != 1 || e != 0 {
         return &capability

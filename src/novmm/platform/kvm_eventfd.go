@@ -5,12 +5,12 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int IoEventFd = KVM_IOEVENTFD;
+const int IoctlIoEventFd = KVM_IOEVENTFD;
 
 // IOCTL flags.
-const int IoEventFdFlagPio = KVM_IOEVENTFD_FLAG_PIO;
-const int IoEventFdFlagDatamatch = KVM_IOEVENTFD_FLAG_DATAMATCH;
-const int IoEventFdFlagDeassign = KVM_IOEVENTFD_FLAG_DEASSIGN;
+const int IoctlIoEventFdFlagPio = KVM_IOEVENTFD_FLAG_PIO;
+const int IoctlIoEventFdFlagDatamatch = KVM_IOEVENTFD_FLAG_DATAMATCH;
+const int IoctlIoEventFdFlagDeassign = KVM_IOEVENTFD_FLAG_DEASSIGN;
 */
 import "C"
 
@@ -52,13 +52,13 @@ func (vm *Vm) SetEventFd(
     ioeventfd.fd = C.__s32(eventfd.Fd())
 
     if is_pio {
-        ioeventfd.flags |= C.__u32(C.IoEventFdFlagPio)
+        ioeventfd.flags |= C.__u32(C.IoctlIoEventFdFlagPio)
     }
     if unbind {
-        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDeassign)
+        ioeventfd.flags |= C.__u32(C.IoctlIoEventFdFlagDeassign)
     }
     if has_value {
-        ioeventfd.flags |= C.__u32(C.IoEventFdFlagDatamatch)
+        ioeventfd.flags |= C.__u32(C.IoctlIoEventFdFlagDatamatch)
         ioeventfd.datamatch = C.__u64(value)
     }
 
@@ -66,7 +66,7 @@ func (vm *Vm) SetEventFd(
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.IoEventFd),
+        uintptr(C.IoctlIoEventFd),
         uintptr(unsafe.Pointer(&ioeventfd)))
     if e != 0 {
         return e

@@ -122,7 +122,7 @@ func (fidpool *Fidpool) MarshalJSON() ([]byte, error) {
 func (fidpool *Fidpool) UnmarshalJSON(data []byte) error {
 
     // Unmarshal as an array.
-    fids := make([]*Fid, 0, len(*fidpool))
+    fids := make([]*Fid, 0, 0)
     err := json.Unmarshal(data, &fids)
     if err != nil {
         return err

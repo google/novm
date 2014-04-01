@@ -91,7 +91,7 @@ func (fc *Fcall) String() string {
             fc.Tag, fc.Msize, fc.Version)
     case Tauth:
         ret = fmt.Sprintf(
-            "Tauth tag %d afid %d uname '%s' nuname %d aname '%s'",
+            "Tauth tag %d afid %x uname '%s' nuname %d aname '%s'",
             fc.Tag, fc.Afid, fc.Uname, fc.Unamenum, fc.Aname)
     case Rauth:
         ret = fmt.Sprintf(
@@ -101,7 +101,7 @@ func (fc *Fcall) String() string {
             "Rattach tag %d aqid %v", fc.Tag, &fc.Qid)
     case Tattach:
         ret = fmt.Sprintf(
-            "Tattach tag %d fid %d afid %d uname '%s' nuname %d aname '%s'",
+            "Tattach tag %d fid %x afid %x uname '%s' nuname %d aname '%s'",
             fc.Tag, fc.Fid, fc.Afid, fc.Uname, fc.Unamenum, fc.Aname)
     case Tflush:
         ret = fmt.Sprintf(
@@ -113,7 +113,7 @@ func (fc *Fcall) String() string {
             fc.Tag, fc.Error, fc.Errornum)
     case Twalk:
         ret = fmt.Sprintf(
-            "Twalk tag %d fid %d newfid %d ",
+            "Twalk tag %d fid %x newfid %x ",
             fc.Tag, fc.Fid, fc.Newfid)
         for i := 0; i < len(fc.Wname); i++ {
             ret += fmt.Sprintf("%d:'%s' ", i, fc.Wname[i])
@@ -125,7 +125,7 @@ func (fc *Fcall) String() string {
         }
     case Topen:
         ret = fmt.Sprintf(
-            "Topen tag %d fid %d mode %x",
+            "Topen tag %d fid %x mode %x",
             fc.Tag, fc.Fid, fc.Mode)
     case Ropen:
         ret = fmt.Sprintf(
@@ -137,11 +137,11 @@ func (fc *Fcall) String() string {
             fc.Tag, &fc.Qid, fc.Iounit)
     case Tcreate:
         ret = fmt.Sprintf(
-            "Tcreate tag %d fid %d name '%s' perm %s mode %x",
+            "Tcreate tag %d fid %x name '%s' perm %s mode %x",
             fc.Tag, fc.Fid, fc.Name, permToString(fc.Perm), fc.Mode)
     case Tread:
         ret = fmt.Sprintf(
-            "Tread tag %d fid %d offset %d count %d",
+            "Tread tag %d fid %x offset %d count %d",
             fc.Tag, fc.Fid, fc.Offset, fc.Count)
     case Rread:
         ret = fmt.Sprintf(
@@ -149,7 +149,7 @@ func (fc *Fcall) String() string {
             fc.Tag, fc.Count)
     case Twrite:
         ret = fmt.Sprintf(
-            "Twrite tag %d fid %d offset %d count %d",
+            "Twrite tag %d fid %x offset %d count %d",
             fc.Tag, fc.Fid, fc.Offset, fc.Count)
     case Rwrite:
         ret = fmt.Sprintf(
@@ -157,7 +157,7 @@ func (fc *Fcall) String() string {
             fc.Tag, fc.Count)
     case Tclunk:
         ret = fmt.Sprintf(
-            "Tclunk tag %d fid %d",
+            "Tclunk tag %d fid %x",
             fc.Tag, fc.Fid)
     case Rclunk:
         ret = fmt.Sprintf(
@@ -165,11 +165,11 @@ func (fc *Fcall) String() string {
             fc.Tag)
     case Tremove:
         ret = fmt.Sprintf(
-            "Tremove tag %d fid %d",
+            "Tremove tag %d fid %x",
             fc.Tag, fc.Fid)
     case Tstat:
         ret = fmt.Sprintf(
-            "Tstat tag %d fid %d",
+            "Tstat tag %d fid %x",
             fc.Tag, fc.Fid)
     case Rstat:
         ret = fmt.Sprintf(
@@ -177,7 +177,7 @@ func (fc *Fcall) String() string {
             fc.Tag, &fc.Dir)
     case Twstat:
         ret = fmt.Sprintf(
-            "Twstat tag %d fid %d st (%v)",
+            "Twstat tag %d fid %x st (%v)",
             fc.Tag, fc.Fid, &fc.Dir)
     case Rflush:
         ret = fmt.Sprintf(

@@ -5,13 +5,13 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int CreateIrqChip = KVM_CREATE_IRQCHIP;
-const int GetIrqChip = KVM_GET_IRQCHIP;
-const int SetIrqChip = KVM_SET_IRQCHIP;
-const int IrqLine = KVM_IRQ_LINE;
-const int SignalMsi = KVM_SIGNAL_MSI;
-const int GetLApic = KVM_GET_LAPIC;
-const int SetLApic = KVM_SET_LAPIC;
+const int IoctlCreateIrqChip = KVM_CREATE_IRQCHIP;
+const int IoctlGetIrqChip = KVM_GET_IRQCHIP;
+const int IoctlSetIrqChip = KVM_SET_IRQCHIP;
+const int IoctlIrqLine = KVM_IRQ_LINE;
+const int IoctlSignalMsi = KVM_SIGNAL_MSI;
+const int IoctlGetLApic = KVM_GET_LAPIC;
+const int IoctlSetLApic = KVM_SET_LAPIC;
 
 // Size of our lapic state.
 const int ApicSize = KVM_APIC_REG_SIZE;
@@ -36,7 +36,6 @@ import "C"
 
 import (
     "errors"
-    "log"
     "syscall"
     "unsafe"
 )
@@ -74,7 +73,7 @@ func (vm *Vm) CreateIrqChip() error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.CreateIrqChip),
+        uintptr(C.IoctlCreateIrqChip),
         0)
     if e != 0 {
         return e
@@ -88,7 +87,6 @@ func (vm *Vm) CreateIrqChip() error {
         return errors.New("KVM irq_level doesn't match expected!")
     }
 
-    log.Print("kvm: IRQ chip created.")
     return nil
 }
 
@@ -117,7 +115,7 @@ func (vm *Vm) Interrupt(
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.IrqLine),
+        uintptr(C.IoctlIrqLine),
         uintptr(unsafe.Pointer(&irq_level)))
     if e != 0 {
         return e
@@ -142,7 +140,7 @@ func (vm *Vm) SignalMSI(
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.SignalMsi),
+        uintptr(C.IoctlSignalMsi),
         uintptr(unsafe.Pointer(&msi)))
     if e != 0 {
         return e
@@ -171,7 +169,7 @@ func (vm *Vm) GetIrqChip() (IrqChip, error) {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vm.fd),
-            uintptr(C.GetIrqChip),
+            uintptr(C.IoctlGetIrqChip),
             uintptr(unsafe.Pointer(&buf[0])))
         if e != 0 {
             return state, e
@@ -231,7 +229,7 @@ func (vm *Vm) SetIrqChip(state IrqChip) error {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vm.fd),
-            uintptr(C.SetIrqChip),
+            uintptr(C.IoctlSetIrqChip),
             uintptr(unsafe.Pointer(&buf[0])))
         if e != 0 {
             return e
@@ -249,7 +247,7 @@ func (vcpu *Vcpu) GetLApic() (LApicState, error) {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.GetLApic),
+        uintptr(C.IoctlGetLApic),
         uintptr(unsafe.Pointer(&state.Data[0])))
     if e != 0 {
         return state, e
@@ -275,7 +273,7 @@ func (vcpu *Vcpu) SetLApic(state LApicState) error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.SetLApic),
+        uintptr(C.IoctlSetLApic),
         uintptr(unsafe.Pointer(&state.Data[0])))
     if e != 0 {
         return e

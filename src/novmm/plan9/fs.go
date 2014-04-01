@@ -41,6 +41,7 @@ type Fs struct {
     fidCond *sync.Cond
 
     // Our open files.
+    // This is not serialized.
     files map[string]*File
 
     // Lock protecting the above.
@@ -233,7 +234,7 @@ func (fs *Fs) Handle(req Buffer, resp Buffer, debug bool) error {
                 for count < len(children) {
                     if debug {
                         log.Printf(
-                            "fid %d child[%d] -> %s",
+                            "fid %x child[%d] -> %s",
                             fcall.Fid,
                             count,
                             children[count].Name)
@@ -375,8 +376,8 @@ done:
         fs.filesLock.Lock()
         for fidno, fid := range fs.Pool {
             log.Printf(
-                "  fidno %x: %d refs (%s)",
-                fidno, fid.refs, fid.file)
+                "  fid %x: %d refs (%x)",
+                fidno, fid.refs, fid.file.Qid.Path)
         }
         for path, file := range fs.files {
             log.Printf(
@@ -417,11 +418,14 @@ func (fs *Fs) Attach() error {
     }
 
     // Restore all our Fids.
+    // We know that everything in the pool
+    // should have exactly one reference.
     for _, fid := range fs.Pool {
         fid.file, err = fs.lookup(fid.Path)
         if err != nil {
             return err
         }
+        fid.refs = 1
     }
 
     if fs.Fdlimit == 0 {

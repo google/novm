@@ -14,9 +14,6 @@ type Apic struct {
     LApic  platform.Paddr `json:"lapic"`
 
     // Our platform APIC.
-    // This may be a separate device, but since
-    // it's pretty fundamental to the operation of
-    // the machine, we consider it part of our "bios".
     State platform.IrqChip `json:"state"`
 }
 
@@ -62,17 +59,11 @@ func (apic *Apic) Attach(vm *platform.Vm, model *Model) error {
         return err
     }
 
-    // Load state.
-    err = vm.SetIrqChip(apic.State)
-    if err != nil {
-        return err
-    }
-
     // We're good.
     return nil
 }
 
-func (apic *Apic) Sync(vm *platform.Vm) error {
+func (apic *Apic) Save(vm *platform.Vm) error {
 
     var err error
 
@@ -84,4 +75,9 @@ func (apic *Apic) Sync(vm *platform.Vm) error {
 
     // We're good.
     return nil
+}
+
+func (apic *Apic) Load(vm *platform.Vm) error {
+    // Load state.
+    return vm.SetIrqChip(apic.State)
 }

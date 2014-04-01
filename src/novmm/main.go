@@ -39,7 +39,7 @@ var system_map = flag.String("sysmap", "", "kernel symbol map")
 var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
 var debug = flag.Bool("debug", false, "devices start debugging")
-var freakout = flag.Bool("panic", false, "panic on fatal error")
+var paused = flag.Bool("paused", false, "start with model and vcpus paused")
 
 func restart(
     model *machine.Model,
@@ -111,6 +111,7 @@ func restart(
         fmt.Sprintf("-statefd=%d", state_fd),
         fmt.Sprintf("-eventfds=%t", *eventfds),
         fmt.Sprintf("-trace=%t", is_tracing),
+        fmt.Sprintf("-paused=%t", *paused),
     }
 
     return syscall.Exec(bin, cmd, os.Environ())
@@ -126,6 +127,7 @@ func main() {
         utils.Die(err)
     }
     defer vm.Dispose()
+
     if *eventfds {
         vm.EnableEventFds()
     }
@@ -149,18 +151,39 @@ func main() {
     state_file.Close()
 
     // Load all devices.
-    proxy, err := model.LoadDevices(vm, state.Devices, *debug)
+    log.Printf("Creating devices...")
+    proxy, err := model.CreateDevices(vm, state.Devices, *debug)
     if err != nil {
         utils.Die(err)
     }
 
     // Load all vcpus.
-    vcpus, err := vm.LoadVcpus(state.Vcpus)
+    log.Printf("Creating vcpus...")
+    vcpus, err := vm.CreateVcpus(state.Vcpus)
     if err != nil {
         utils.Die(err)
     }
     if len(vcpus) == 0 {
         utils.Die(NoVcpus)
+    }
+
+    // Load all model state.
+    log.Printf("Loading model...")
+    err = model.Load(vm)
+    if err != nil {
+        utils.Die(err)
+    }
+
+    // Pause all devices and vcpus if requested.
+    if *paused {
+        err = model.Pause(true)
+        if err != nil {
+            utils.Die(err)
+        }
+        err = vm.Pause(true)
+        if err != nil {
+            utils.Die(err)
+        }
     }
 
     // Enable stepping if requested.
@@ -181,6 +204,7 @@ func main() {
     var convention *loader.Convention
 
     if *vmlinux != "" {
+        log.Printf("Loading linux...")
         sysmap, convention, err = loader.LoadLinux(
             vcpus[0],
             model,
@@ -203,20 +227,8 @@ func main() {
         tracer.Enable()
     }
 
-    // Start all VCPUs.
-    // None of these will actually come online
-    // until the primary VCPU below delivers the
-    // appropriate IPI to start them up.
-    vcpu_err := make(chan error)
-    for _, vcpu := range vcpus {
-        go func(vcpu *platform.Vcpu) {
-            defer vcpu.Dispose()
-            err := Loop(vm, vcpu, model, tracer)
-            vcpu_err <- err
-        }(vcpu)
-    }
-
     // Create our RPC server.
+    log.Printf("Starting control server...")
     control, err := control.NewControl(
         *control_fd,
         *real_init,
@@ -225,11 +237,23 @@ func main() {
         tracer,
         proxy,
         is_load)
-
     if err != nil {
         utils.Die(err)
     }
     go control.Serve()
+
+    // Start all VCPUs.
+    // None of these will actually come online
+    // until the primary VCPU below delivers the
+    // appropriate IPI to start them up.
+    log.Printf("Starting vcpus...")
+    vcpu_err := make(chan error)
+    for _, vcpu := range vcpus {
+        go func(vcpu *platform.Vcpu) {
+            err := Loop(vm, vcpu, model, tracer)
+            vcpu_err <- err
+        }(vcpu)
+    }
 
     // Wait until we get a TERM signal, or all the VCPUs are dead.
     // If we receive a HUP signal, then we will re-exec with the

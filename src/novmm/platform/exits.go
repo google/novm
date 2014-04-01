@@ -114,3 +114,10 @@ type ExitDebug struct {
 func (exit *ExitDebug) Error() string {
     return fmt.Sprintf("Debug exit (single-step)")
 }
+
+type ExitShutdown struct {
+}
+
+func (exit *ExitShutdown) Error() string {
+    return fmt.Sprintf("Shutdown exit")
+}

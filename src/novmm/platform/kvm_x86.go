@@ -7,14 +7,19 @@ package platform
 #include <string.h>
 
 // VCPU Ioctls.
-const int GetRegs = KVM_GET_REGS;
-const int SetRegs = KVM_SET_REGS;
-const int GetSRegs = KVM_GET_SREGS;
-const int SetSRegs = KVM_SET_SREGS;
+const int IoctlGetRegs = KVM_GET_REGS;
+const int IoctlSetRegs = KVM_SET_REGS;
+const int IoctlGetSRegs = KVM_GET_SREGS;
+const int IoctlSetSRegs = KVM_SET_SREGS;
 
 // VM Ioctls.
-const int SetIdentityMapAddr = KVM_SET_IDENTITY_MAP_ADDR;
-const int SetTssAddr = KVM_SET_TSS_ADDR;
+const int IoctlSetIdentityMapAddr = KVM_SET_IDENTITY_MAP_ADDR;
+const int IoctlSetTssAddr = KVM_SET_TSS_ADDR;
+
+// Helper: see the comment in refreshSRegs().
+void clear_interrupt_bitmap(struct kvm_sregs *sregs) {
+    memset(sregs->interrupt_bitmap, 0, sizeof(sregs->interrupt_bitmap));
+}
 */
 import "C"
 
@@ -35,7 +40,7 @@ func (vcpu *Vcpu) refreshRegs(dirty bool) error {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vcpu.fd),
-            uintptr(C.GetRegs),
+            uintptr(C.IoctlGetRegs),
             uintptr(unsafe.Pointer(&vcpu.regs)))
         if e != 0 {
             return e
@@ -55,7 +60,7 @@ func (vcpu *Vcpu) flushRegs() error {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vcpu.fd),
-            uintptr(C.SetRegs),
+            uintptr(C.IoctlSetRegs),
             uintptr(unsafe.Pointer(&vcpu.regs)))
         if e != 0 {
             return e
@@ -73,12 +78,17 @@ func (vcpu *Vcpu) refreshSRegs(dirty bool) error {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vcpu.fd),
-            uintptr(C.GetSRegs),
+            uintptr(C.IoctlGetSRegs),
             uintptr(unsafe.Pointer(&vcpu.sregs)))
         if e != 0 {
             return e
         }
         vcpu.sregs_cached = true
+
+        // We never attempt to inject an interrupt via
+        // the interrupt_bitmap mechanism. We handle that
+        // via other state functions and explicitly.
+        C.clear_interrupt_bitmap(&vcpu.sregs)
     }
 
     if dirty {
@@ -93,7 +103,7 @@ func (vcpu *Vcpu) flushSRegs() error {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(vcpu.fd),
-            uintptr(C.SetSRegs),
+            uintptr(C.IoctlSetSRegs),
             uintptr(unsafe.Pointer(&vcpu.sregs)))
         if e != 0 {
             return e
@@ -103,6 +113,15 @@ func (vcpu *Vcpu) flushSRegs() error {
 
     vcpu.sregs_cached = false
     return nil
+}
+
+func (vcpu *Vcpu) flushAllRegs() error {
+    // Flush all registers.
+    err := vcpu.flushSRegs()
+    if err != nil {
+        return err
+    }
+    return vcpu.flushRegs()
 }
 
 func (vcpu *Vcpu) SetRegister(reg Register, val RegisterValue) error {
@@ -291,6 +310,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.cs.l = C.__u8(val.L)
         vcpu.sregs.cs.g = C.__u8(val.G)
         vcpu.sregs.cs.avl = C.__u8(val.Avl)
+        vcpu.sregs.cs.unusable = C.__u8(^val.Present & 0x1)
     case DS:
         vcpu.sregs.ds.base = C.__u64(val.Base)
         vcpu.sregs.ds.limit = C.__u32(val.Limit)
@@ -303,6 +323,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.ds.l = C.__u8(val.L)
         vcpu.sregs.ds.g = C.__u8(val.G)
         vcpu.sregs.ds.avl = C.__u8(val.Avl)
+        vcpu.sregs.ds.unusable = C.__u8(^val.Present & 0x1)
     case ES:
         vcpu.sregs.es.base = C.__u64(val.Base)
         vcpu.sregs.es.limit = C.__u32(val.Limit)
@@ -315,6 +336,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.es.l = C.__u8(val.L)
         vcpu.sregs.es.g = C.__u8(val.G)
         vcpu.sregs.es.avl = C.__u8(val.Avl)
+        vcpu.sregs.es.unusable = C.__u8(^val.Present & 0x1)
     case FS:
         vcpu.sregs.fs.base = C.__u64(val.Base)
         vcpu.sregs.fs.limit = C.__u32(val.Limit)
@@ -327,6 +349,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.fs.l = C.__u8(val.L)
         vcpu.sregs.fs.g = C.__u8(val.G)
         vcpu.sregs.fs.avl = C.__u8(val.Avl)
+        vcpu.sregs.fs.unusable = C.__u8(^val.Present & 0x1)
     case GS:
         vcpu.sregs.gs.base = C.__u64(val.Base)
         vcpu.sregs.gs.limit = C.__u32(val.Limit)
@@ -339,6 +362,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.gs.l = C.__u8(val.L)
         vcpu.sregs.gs.g = C.__u8(val.G)
         vcpu.sregs.gs.avl = C.__u8(val.Avl)
+        vcpu.sregs.gs.unusable = C.__u8(^val.Present & 0x1)
     case SS:
         vcpu.sregs.ss.base = C.__u64(val.Base)
         vcpu.sregs.ss.limit = C.__u32(val.Limit)
@@ -351,6 +375,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.ss.l = C.__u8(val.L)
         vcpu.sregs.ss.g = C.__u8(val.G)
         vcpu.sregs.ss.avl = C.__u8(val.Avl)
+        vcpu.sregs.ss.unusable = C.__u8(^val.Present & 0x1)
     case TR:
         vcpu.sregs.tr.base = C.__u64(val.Base)
         vcpu.sregs.tr.limit = C.__u32(val.Limit)
@@ -363,6 +388,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.tr.l = C.__u8(val.L)
         vcpu.sregs.tr.g = C.__u8(val.G)
         vcpu.sregs.tr.avl = C.__u8(val.Avl)
+        vcpu.sregs.tr.unusable = C.__u8(^val.Present & 0x1)
     case LDT:
         vcpu.sregs.ldt.base = C.__u64(val.Base)
         vcpu.sregs.ldt.limit = C.__u32(val.Limit)
@@ -375,6 +401,7 @@ func (vcpu *Vcpu) SetSegment(
         vcpu.sregs.ldt.l = C.__u8(val.L)
         vcpu.sregs.ldt.g = C.__u8(val.G)
         vcpu.sregs.ldt.avl = C.__u8(val.Avl)
+        vcpu.sregs.ldt.unusable = C.__u8(^val.Present & 0x1)
     default:
         return UnknownRegister
     }
@@ -580,11 +607,12 @@ func (vm *Vm) MapSpecialMemory(addr Paddr) error {
 
     // Set the EPT identity map.
     // (This requires a single page).
+    ept_identity_addr := C.__u64(addr)
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.SetIdentityMapAddr),
-        uintptr(unsafe.Pointer(&addr)))
+        uintptr(C.IoctlSetIdentityMapAddr),
+        uintptr(unsafe.Pointer(&ept_identity_addr)))
     if e != 0 {
         log.Printf("Unable to set identity map to %08x!", addr)
         return e
@@ -601,7 +629,7 @@ func (vm *Vm) MapSpecialMemory(addr Paddr) error {
     _, _, e = syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.SetTssAddr),
+        uintptr(C.IoctlSetTssAddr),
         uintptr(addr+PageSize))
     if e != 0 {
         log.Printf("Unable to set TSS ADDR to %08x!", addr+PageSize)

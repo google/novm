@@ -26,17 +26,11 @@ func (pit *Pit) Attach(vm *platform.Vm, model *Model) error {
         return err
     }
 
-    // Load state.
-    err = vm.SetPit(pit.Pit)
-    if err != nil {
-        return err
-    }
-
     // We're good.
     return nil
 }
 
-func (pit *Pit) Sync(vm *platform.Vm) error {
+func (pit *Pit) Save(vm *platform.Vm) error {
 
     var err error
 
@@ -48,4 +42,9 @@ func (pit *Pit) Sync(vm *platform.Vm) error {
 
     // We're good.
     return nil
+}
+
+func (pit *Pit) Load(vm *platform.Vm) error {
+    // Load state.
+    return vm.SetPit(pit.Pit)
 }

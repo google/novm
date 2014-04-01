@@ -16,3 +16,4 @@ var UnknownRegister = errors.New("Unknown Register")
 // Vcpu state errors.
 var NotPaused = errors.New("Vcpu is not paused?")
 var AlreadyPaused = errors.New("Vcpu is already paused.")
+var UnknownState = errors.New("Unknown vcpu state?")

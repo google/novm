@@ -5,9 +5,9 @@ package platform
 #include <linux/kvm.h>
 
 // IOCTL calls.
-const int CreatePit2 = KVM_CREATE_PIT2;
-const int GetPit2 = KVM_GET_PIT2;
-const int SetPit2 = KVM_SET_PIT2;
+const int IoctlCreatePit2 = KVM_CREATE_PIT2;
+const int IoctlGetPit2 = KVM_GET_PIT2;
+const int IoctlSetPit2 = KVM_SET_PIT2;
 
 // Size of pit state.
 const int PitSize = sizeof(struct kvm_pit_state2);
@@ -15,7 +15,6 @@ const int PitSize = sizeof(struct kvm_pit_state2);
 import "C"
 
 import (
-    "log"
     "syscall"
     "unsafe"
 )
@@ -45,13 +44,12 @@ func (vm *Vm) CreatePit() error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.CreatePit2),
+        uintptr(C.IoctlCreatePit2),
         uintptr(unsafe.Pointer(&pit)))
     if e != 0 {
         return e
     }
 
-    log.Print("kvm: PIT created.")
     return nil
 }
 
@@ -64,7 +62,7 @@ func (vm *Vm) GetPit() (PitState, error) {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.GetPit2),
+        uintptr(C.IoctlGetPit2),
         uintptr(unsafe.Pointer(&state.Data[0])))
     if e != 0 {
         return state, e
@@ -90,7 +88,7 @@ func (vm *Vm) SetPit(state PitState) error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vm.fd),
-        uintptr(C.SetPit2),
+        uintptr(C.IoctlSetPit2),
         uintptr(unsafe.Pointer(&state.Data[0])))
     if e != 0 {
         return e

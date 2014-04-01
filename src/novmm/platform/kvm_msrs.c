@@ -29,7 +29,7 @@ int msr_list_index(void *data, int n, __u32 *index) {
     struct kvm_msr_list *msrs = (struct kvm_msr_list*)data;
 
     /* More than we have? */
-    if (msrs->nmsrs >= n) {
+    if (n >= msrs->nmsrs) {
         return 1;
     }
 

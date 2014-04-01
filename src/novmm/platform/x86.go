@@ -52,21 +52,35 @@ const (
 )
 
 //
+// Segment descriptor registers.
+//
+type Descriptor int
+type DescriptorValue struct {
+    Base  uint64 `json:"base"`
+    Limit uint16 `json:"limit"`
+}
+
+const (
+    GDT Descriptor = iota
+    IDT
+)
+
+//
 // Segment registers.
 //
 type Segment int
 type SegmentValue struct {
-    Base     uint64
-    Limit    uint32
-    Selector uint16
-    Type     uint8
-    Present  uint8
-    Dpl      uint8
-    Db       uint8
-    L        uint8
-    S        uint8
-    G        uint8
-    Avl      uint8
+    Base     uint64 `json:"base"`
+    Limit    uint32 `json:"limit"`
+    Selector uint16 `json:"selector"`
+    Type     uint8  `json:"type"`
+    Present  uint8  `json:"present"`
+    Dpl      uint8  `json:"dpl"`
+    Db       uint8  `json:"db"`
+    L        uint8  `json:"l"`
+    S        uint8  `json:"s"`
+    G        uint8  `json:"g"`
+    Avl      uint8  `json:"avl"`
 }
 
 const (
@@ -78,20 +92,6 @@ const (
     SS
     TR
     LDT
-)
-
-//
-// Segment descriptor registers.
-//
-type Descriptor int
-type DescriptorValue struct {
-    Base  uint64
-    Limit uint16
-}
-
-const (
-    GDT Descriptor = iota
-    IDT
 )
 
 //
@@ -123,7 +123,10 @@ type Registers struct {
     CR4       *ControlRegisterValue
     CR8       *ControlRegisterValue
     EFER      *ControlRegisterValue
-    APIC_BASE *ControlRegisterValue
+    APIC_BASE *ControlRegisterValue `json:"APIC"`
+
+    IDT *DescriptorValue
+    GDT *DescriptorValue
 
     CS  *SegmentValue
     DS  *SegmentValue
@@ -133,159 +136,239 @@ type Registers struct {
     SS  *SegmentValue
     TR  *SegmentValue
     LDT *SegmentValue
-
-    IDT *DescriptorValue
-    GDT *DescriptorValue
 }
 
-func (vcpu *Vcpu) getRegister(name string, reg Register) *RegisterValue {
+func (vcpu *Vcpu) getRegister(
+    name string,
+    reg Register,
+    errs []error) (*RegisterValue, []error) {
+
     value, err := vcpu.GetRegister(reg)
     if err != nil {
-        return nil
+        errs = append(errs, err)
+        return nil, errs
     }
 
-    return &value
+    return &value, errs
 }
 
-func (vcpu *Vcpu) getControlRegister(name string, reg ControlRegister) *ControlRegisterValue {
+func (vcpu *Vcpu) getControlRegister(
+    name string,
+    reg ControlRegister,
+    errs []error) (*ControlRegisterValue, []error) {
+
     value, err := vcpu.GetControlRegister(reg)
     if err != nil {
-        return nil
+        errs = append(errs, err)
+        return nil, errs
     }
 
-    return &value
+    return &value, errs
 }
 
-func (vcpu *Vcpu) getSegment(name string, seg Segment) *SegmentValue {
-    value, err := vcpu.GetSegment(seg)
-    if err != nil {
-        return nil
-    }
+func (vcpu *Vcpu) getDescriptor(
+    name string,
+    desc Descriptor,
+    errs []error) (*DescriptorValue, []error) {
 
-    return &value
-}
-
-func (vcpu *Vcpu) getDescriptor(name string, desc Descriptor) *DescriptorValue {
     value, err := vcpu.GetDescriptor(desc)
     if err != nil {
-        return nil
+        errs = append(errs, err)
+        return nil, errs
     }
 
-    return &value
+    return &value, errs
 }
 
-func (vcpu *Vcpu) GetRegisters() Registers {
+func (vcpu *Vcpu) getSegment(
+    name string,
+    seg Segment,
+    errs []error) (*SegmentValue, []error) {
+
+    value, err := vcpu.GetSegment(seg)
+    if err != nil {
+        errs = append(errs, err)
+        return nil, errs
+    }
+
+    return &value, errs
+}
+
+func (vcpu *Vcpu) GetRegisters() (Registers, error) {
     vcpu.Pause(false)
     defer vcpu.Unpause(false)
 
     var regs Registers
+    errs := make([]error, 0, 0)
 
-    regs.RAX = vcpu.getRegister("RAX", RAX)
-    regs.RBX = vcpu.getRegister("RBX", RBX)
-    regs.RCX = vcpu.getRegister("RCX", RCX)
-    regs.RDX = vcpu.getRegister("RDX", RDX)
-    regs.RSI = vcpu.getRegister("RSI", RSI)
-    regs.RDI = vcpu.getRegister("RDI", RDI)
-    regs.RSP = vcpu.getRegister("RSP", RSP)
-    regs.RBP = vcpu.getRegister("RBP", RBP)
-    regs.R8 = vcpu.getRegister("R8", R8)
-    regs.R9 = vcpu.getRegister("R9", R9)
-    regs.R10 = vcpu.getRegister("R10", R10)
-    regs.R11 = vcpu.getRegister("R11", R11)
-    regs.R12 = vcpu.getRegister("R12", R12)
-    regs.R13 = vcpu.getRegister("R13", R13)
-    regs.R14 = vcpu.getRegister("R14", R14)
-    regs.R15 = vcpu.getRegister("R15", R15)
-    regs.RIP = vcpu.getRegister("RIP", RIP)
-    regs.RFLAGS = vcpu.getRegister("RFLAGS", RFLAGS)
+    regs.RAX, errs = vcpu.getRegister("RAX", RAX, errs)
+    regs.RBX, errs = vcpu.getRegister("RBX", RBX, errs)
+    regs.RCX, errs = vcpu.getRegister("RCX", RCX, errs)
+    regs.RDX, errs = vcpu.getRegister("RDX", RDX, errs)
+    regs.RSI, errs = vcpu.getRegister("RSI", RSI, errs)
+    regs.RDI, errs = vcpu.getRegister("RDI", RDI, errs)
+    regs.RSP, errs = vcpu.getRegister("RSP", RSP, errs)
+    regs.RBP, errs = vcpu.getRegister("RBP", RBP, errs)
+    regs.R8, errs = vcpu.getRegister("R8", R8, errs)
+    regs.R9, errs = vcpu.getRegister("R9", R9, errs)
+    regs.R10, errs = vcpu.getRegister("R10", R10, errs)
+    regs.R11, errs = vcpu.getRegister("R11", R11, errs)
+    regs.R12, errs = vcpu.getRegister("R12", R12, errs)
+    regs.R13, errs = vcpu.getRegister("R13", R13, errs)
+    regs.R14, errs = vcpu.getRegister("R14", R14, errs)
+    regs.R15, errs = vcpu.getRegister("R15", R15, errs)
+    regs.RIP, errs = vcpu.getRegister("RIP", RIP, errs)
+    regs.RFLAGS, errs = vcpu.getRegister("RFLAGS", RFLAGS, errs)
 
-    regs.CR0 = vcpu.getControlRegister("CR0", CR0)
-    regs.CR2 = vcpu.getControlRegister("CR2", CR2)
-    regs.CR3 = vcpu.getControlRegister("CR3", CR3)
-    regs.CR4 = vcpu.getControlRegister("CR4", CR4)
-    regs.CR8 = vcpu.getControlRegister("CR8", CR8)
-    regs.EFER = vcpu.getControlRegister("EFER", EFER)
-    regs.APIC_BASE = vcpu.getControlRegister("APIC_BASE", APIC_BASE)
+    regs.CR0, errs = vcpu.getControlRegister("CR0", CR0, errs)
+    regs.CR2, errs = vcpu.getControlRegister("CR2", CR2, errs)
+    regs.CR3, errs = vcpu.getControlRegister("CR3", CR3, errs)
+    regs.CR4, errs = vcpu.getControlRegister("CR4", CR4, errs)
+    regs.CR8, errs = vcpu.getControlRegister("CR8", CR8, errs)
+    regs.EFER, errs = vcpu.getControlRegister("EFER", EFER, errs)
+    regs.APIC_BASE, errs = vcpu.getControlRegister("APIC_BASE", APIC_BASE, errs)
 
-    regs.CS = vcpu.getSegment("CS", CS)
-    regs.DS = vcpu.getSegment("DS", DS)
-    regs.ES = vcpu.getSegment("ES", ES)
-    regs.FS = vcpu.getSegment("FS", FS)
-    regs.GS = vcpu.getSegment("GS", GS)
-    regs.SS = vcpu.getSegment("SS", SS)
-    regs.TR = vcpu.getSegment("TR", TR)
-    regs.LDT = vcpu.getSegment("LDT", LDT)
+    regs.GDT, errs = vcpu.getDescriptor("GDT", GDT, errs)
+    regs.IDT, errs = vcpu.getDescriptor("IDT", IDT, errs)
 
-    regs.GDT = vcpu.getDescriptor("GDT", GDT)
-    regs.IDT = vcpu.getDescriptor("IDT", IDT)
+    regs.CS, errs = vcpu.getSegment("CS", CS, errs)
+    regs.DS, errs = vcpu.getSegment("DS", DS, errs)
+    regs.ES, errs = vcpu.getSegment("ES", ES, errs)
+    regs.FS, errs = vcpu.getSegment("FS", FS, errs)
+    regs.GS, errs = vcpu.getSegment("GS", GS, errs)
+    regs.SS, errs = vcpu.getSegment("SS", SS, errs)
+    regs.TR, errs = vcpu.getSegment("TR", TR, errs)
+    regs.LDT, errs = vcpu.getSegment("LDT", LDT, errs)
 
-    return regs
-}
-
-func (vcpu *Vcpu) setRegister(name string, reg Register, value *RegisterValue) {
-    if value != nil {
-        vcpu.SetRegister(reg, *value)
+    // Return a simple error.
+    // We could actually return a more
+    // meaningful error here that describes
+    // all the registers which had errors,
+    // but for now this will do the trick.
+    for _, err := range errs {
+        if err != nil {
+            return Registers{}, err
+        }
     }
+
+    return regs, nil
 }
 
-func (vcpu *Vcpu) setControlRegister(name string, reg ControlRegister, value *ControlRegisterValue) {
+func (vcpu *Vcpu) setRegister(
+    name string,
+    reg Register,
+    value *RegisterValue,
+    errs []error) []error {
+
     if value != nil {
-        vcpu.SetControlRegister(reg, *value, false)
+        err := vcpu.SetRegister(reg, *value)
+        if err != nil {
+            errs = append(errs, err)
+        }
     }
+
+    return errs
 }
 
-func (vcpu *Vcpu) setSegment(name string, seg Segment, value *SegmentValue) {
+func (vcpu *Vcpu) setControlRegister(
+    name string,
+    reg ControlRegister,
+    value *ControlRegisterValue,
+    errs []error) []error {
+
     if value != nil {
-        vcpu.SetSegment(seg, *value, false)
+        err := vcpu.SetControlRegister(reg, *value, false)
+        if err != nil {
+            errs = append(errs, err)
+        }
     }
+
+    return errs
 }
 
-func (vcpu *Vcpu) setDescriptor(name string, desc Descriptor, value *DescriptorValue) {
+func (vcpu *Vcpu) setDescriptor(
+    name string,
+    desc Descriptor,
+    value *DescriptorValue,
+    errs []error) []error {
+
     if value != nil {
-        vcpu.SetDescriptor(desc, *value, false)
+        err := vcpu.SetDescriptor(desc, *value, false)
+        if err != nil {
+            errs = append(errs, err)
+        }
     }
+
+    return errs
 }
 
-func (vcpu *Vcpu) SetRegisters(regs Registers) {
+func (vcpu *Vcpu) setSegment(
+    name string,
+    seg Segment,
+    value *SegmentValue,
+    errs []error) []error {
+
+    if value != nil {
+        err := vcpu.SetSegment(seg, *value, false)
+        if err != nil {
+            errs = append(errs, err)
+        }
+    }
+
+    return errs
+}
+
+func (vcpu *Vcpu) SetRegisters(regs Registers) error {
     vcpu.Pause(false)
     defer vcpu.Unpause(false)
 
-    vcpu.setRegister("RAX", RAX, regs.RAX)
-    vcpu.setRegister("RBX", RBX, regs.RBX)
-    vcpu.setRegister("RCX", RCX, regs.RCX)
-    vcpu.setRegister("RDX", RDX, regs.RDX)
-    vcpu.setRegister("RSI", RSI, regs.RSI)
-    vcpu.setRegister("RDI", RDI, regs.RDI)
-    vcpu.setRegister("RSP", RSP, regs.RSP)
-    vcpu.setRegister("RBP", RBP, regs.RBP)
-    vcpu.setRegister("R8", R8, regs.R8)
-    vcpu.setRegister("R9", R9, regs.R9)
-    vcpu.setRegister("R10", R10, regs.R10)
-    vcpu.setRegister("R11", R11, regs.R11)
-    vcpu.setRegister("R12", R12, regs.R12)
-    vcpu.setRegister("R13", R13, regs.R13)
-    vcpu.setRegister("R14", R14, regs.R14)
-    vcpu.setRegister("R15", R15, regs.R15)
-    vcpu.setRegister("RIP", RIP, regs.RIP)
-    vcpu.setRegister("RFLAGS", RFLAGS, regs.RFLAGS)
+    errs := make([]error, 0, 0)
 
-    vcpu.setControlRegister("CR0", CR0, regs.CR0)
-    vcpu.setControlRegister("CR2", CR2, regs.CR2)
-    vcpu.setControlRegister("CR3", CR3, regs.CR3)
-    vcpu.setControlRegister("CR4", CR4, regs.CR4)
-    vcpu.setControlRegister("CR8", CR8, regs.CR8)
-    vcpu.setControlRegister("EFER", EFER, regs.EFER)
-    vcpu.setControlRegister("APIC_BASE", APIC_BASE, regs.APIC_BASE)
+    errs = vcpu.setSegment("CS", CS, regs.CS, errs)
+    errs = vcpu.setSegment("DS", DS, regs.DS, errs)
+    errs = vcpu.setSegment("ES", ES, regs.ES, errs)
+    errs = vcpu.setSegment("FS", FS, regs.FS, errs)
+    errs = vcpu.setSegment("GS", GS, regs.GS, errs)
+    errs = vcpu.setSegment("SS", SS, regs.SS, errs)
+    errs = vcpu.setSegment("TR", TR, regs.TR, errs)
+    errs = vcpu.setSegment("LDT", LDT, regs.LDT, errs)
 
-    vcpu.setSegment("CS", CS, regs.CS)
-    vcpu.setSegment("DS", DS, regs.DS)
-    vcpu.setSegment("ES", ES, regs.ES)
-    vcpu.setSegment("FS", FS, regs.FS)
-    vcpu.setSegment("GS", GS, regs.GS)
-    vcpu.setSegment("SS", SS, regs.SS)
-    vcpu.setSegment("TR", TR, regs.TR)
-    vcpu.setSegment("LDT", LDT, regs.LDT)
+    errs = vcpu.setRegister("RAX", RAX, regs.RAX, errs)
+    errs = vcpu.setRegister("RBX", RBX, regs.RBX, errs)
+    errs = vcpu.setRegister("RCX", RCX, regs.RCX, errs)
+    errs = vcpu.setRegister("RDX", RDX, regs.RDX, errs)
+    errs = vcpu.setRegister("RSI", RSI, regs.RSI, errs)
+    errs = vcpu.setRegister("RDI", RDI, regs.RDI, errs)
+    errs = vcpu.setRegister("RSP", RSP, regs.RSP, errs)
+    errs = vcpu.setRegister("RBP", RBP, regs.RBP, errs)
+    errs = vcpu.setRegister("R8", R8, regs.R8, errs)
+    errs = vcpu.setRegister("R9", R9, regs.R9, errs)
+    errs = vcpu.setRegister("R10", R10, regs.R10, errs)
+    errs = vcpu.setRegister("R11", R11, regs.R11, errs)
+    errs = vcpu.setRegister("R12", R12, regs.R12, errs)
+    errs = vcpu.setRegister("R13", R13, regs.R13, errs)
+    errs = vcpu.setRegister("R14", R14, regs.R14, errs)
+    errs = vcpu.setRegister("R15", R15, regs.R15, errs)
+    errs = vcpu.setRegister("RIP", RIP, regs.RIP, errs)
+    errs = vcpu.setRegister("RFLAGS", RFLAGS, regs.RFLAGS, errs)
 
-    vcpu.setDescriptor("GDT", GDT, regs.GDT)
-    vcpu.setDescriptor("IDT", IDT, regs.IDT)
+    errs = vcpu.setControlRegister("CR0", CR0, regs.CR0, errs)
+    errs = vcpu.setControlRegister("CR2", CR2, regs.CR2, errs)
+    errs = vcpu.setControlRegister("CR3", CR3, regs.CR3, errs)
+    errs = vcpu.setControlRegister("CR4", CR4, regs.CR4, errs)
+    errs = vcpu.setControlRegister("CR8", CR8, regs.CR8, errs)
+    errs = vcpu.setControlRegister("EFER", EFER, regs.EFER, errs)
+    errs = vcpu.setControlRegister("APIC_BASE", APIC_BASE, regs.APIC_BASE, errs)
+
+    errs = vcpu.setDescriptor("GDT", GDT, regs.GDT, errs)
+    errs = vcpu.setDescriptor("IDT", IDT, regs.IDT, errs)
+
+    // As per GetRegisters(), return a simple error.
+    for _, err := range errs {
+        if err != nil {
+            return err
+        }
+    }
+
+    return vcpu.flushAllRegs()
 }

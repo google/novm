@@ -67,7 +67,7 @@ func (info DeviceInfo) Load() (Device, error) {
     return device, nil
 }
 
-func (model *Model) LoadDevices(
+func (model *Model) CreateDevices(
     vm *platform.Vm,
     spec []DeviceInfo,
     debug bool) (Proxy, error) {

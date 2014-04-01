@@ -84,6 +84,8 @@ func (vcpu *Vcpu) GetExitError() error {
         return (*ExitException)(C.handle_exit_exception(vcpu.kvm))
     case C.ExitReasonDebug:
         return &ExitDebug{}
+    case C.ExitReasonShutdown:
+        return &ExitShutdown{}
     default:
         return (*ExitUnknown)(C.handle_exit_unknown(vcpu.kvm))
     }

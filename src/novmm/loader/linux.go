@@ -191,7 +191,7 @@ func LoadLinux(
         platform.PageSize)
     copy(full_cmdline, []byte(cmdline))
 
-    cmdline_addr, err := model.Load(
+    cmdline_addr, err := model.MemoryMap.Load(
         platform.Paddr(0),
         model.Max(),
         full_cmdline,
@@ -205,7 +205,7 @@ func LoadLinux(
         cmdline)
 
     // Load the initrd.
-    initrd_addr, err := model.Load(
+    initrd_addr, err := model.MemoryMap.Load(
         platform.Paddr(0),
         model.Max(),
         initrd_data,

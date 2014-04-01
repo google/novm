@@ -96,15 +96,15 @@ func (device *VirtioNetDevice) processPackets(
 
 func NewVirtioMmioNet(info *DeviceInfo) (Device, error) {
     device, err := NewMmioVirtioDevice(info, VirtioTypeNet)
-    device.Channels[0] = device.NewVirtioChannel(256)
-    device.Channels[1] = device.NewVirtioChannel(256)
+    device.Channels[0] = NewVirtioChannel(0, 256)
+    device.Channels[1] = NewVirtioChannel(1, 256)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciNet(info *DeviceInfo) (Device, error) {
     device, err := NewPciVirtioDevice(info, PciClassNetwork, VirtioTypeNet, 16)
-    device.Channels[0] = device.NewVirtioChannel(256)
-    device.Channels[1] = device.NewVirtioChannel(256)
+    device.Channels[0] = NewVirtioChannel(0, 256)
+    device.Channels[1] = NewVirtioChannel(1, 256)
     return &VirtioNetDevice{VirtioDevice: device}, err
 }
 

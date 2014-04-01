@@ -29,6 +29,10 @@ type State struct {
 func SaveState(vm *platform.Vm, model *machine.Model) (State, error) {
 
     // Pause the vm.
+    // NOTE: Our model will also be stopped automatically
+    // with model.DeviceInfo() below, but we manually pause
+    // the Vcpus here in order to ensure they are completely
+    // stopped prior to saving all device state.
     err := vm.Pause(false)
     if err != nil {
         return State{}, err

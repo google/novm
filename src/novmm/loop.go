@@ -13,7 +13,7 @@ func Loop(
     model *machine.Model,
     tracer *loader.Tracer) error {
 
-    log.Print("Vcpu running...")
+    log.Printf("Vcpu[%d] running.", vcpu.Id)
 
     for {
         // Enter the guest.
@@ -40,6 +40,10 @@ func Loop(
 
         case *platform.ExitDebug:
             err = nil
+
+        case *platform.ExitShutdown:
+            // Vcpu shutdown.
+            return nil
         }
 
         // Error handling the exit.

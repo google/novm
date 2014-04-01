@@ -112,6 +112,21 @@ func (io *IoHandler) Run() {
         req := <-io.queue
         size := req.event.Size()
 
+        // Note that we are running.
+        // NOTE: This is a bit awkward. Theoretically,
+        // we could actually be processing an exit from
+        // a vcpu that is in the middle of an operation.
+        // However, I chose to handle this case in kvm_run,
+        // as we don't consider a VCPU to be paused until
+        // it's event is completely processed. From the
+        // device perspective -- nothing related to this
+        // event has yet touched the device, so it's okay
+        // to acquire it at this point and continue. If
+        // this device is paused, then the VCPU will be
+        // unpausable (therefore the normal practice will
+        // be to pause all VCPUs, then pause all devices).
+        io.Device.Acquire()
+
         // Perform the operation.
         if req.event.IsWrite() {
             val := normalize(req.event.GetData(), size)
@@ -142,5 +157,8 @@ func (io *IoHandler) Run() {
                 io.start.After(req.offset),
                 size)
         }
+
+        // We've finished, we could now pause.
+        io.Device.Release()
     }
 }

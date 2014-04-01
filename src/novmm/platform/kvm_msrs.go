@@ -4,9 +4,9 @@ package platform
 #include <linux/kvm.h>
 #include "kvm_msrs.h"
 
-const int GetMsrIndexList = KVM_GET_MSR_INDEX_LIST;
-const int SetMsrs = KVM_SET_MSRS;
-const int GetMsrs = KVM_GET_MSRS;
+const int IoctlGetMsrIndexList = KVM_GET_MSR_INDEX_LIST;
+const int IoctlSetMsrs = KVM_SET_MSRS;
+const int IoctlGetMsrs = KVM_GET_MSRS;
 */
 import "C"
 
@@ -34,7 +34,7 @@ func availableMsrs(fd int) ([]uint32, error) {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(fd),
-            uintptr(C.GetMsrIndexList),
+            uintptr(C.IoctlGetMsrIndexList),
             uintptr(unsafe.Pointer(&msrIndices[0])))
         if e == syscall.E2BIG {
             // The nmsrs field will now have been
@@ -81,7 +81,7 @@ func (vcpu *Vcpu) GetMsr(index uint32) (uint64, error) {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.GetMsrs),
+        uintptr(C.IoctlGetMsrs),
         uintptr(unsafe.Pointer(&data[0])))
     if e != 0 {
         return 0, e
@@ -103,7 +103,7 @@ func (vcpu *Vcpu) SetMsr(index uint32, value uint64) error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.SetMsrs),
+        uintptr(C.IoctlSetMsrs),
         uintptr(unsafe.Pointer(&data[0])))
     if e != 0 {
         return e

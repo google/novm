@@ -215,6 +215,10 @@ class NovmManager(object):
             # Always enable an RTC.
             devices.append(clock.Rtc())
 
+            # Enable user-memory.
+            devices.append(memory.UserMemory.create(
+                size=1024*1024*memsize))
+
             # Use a PCI bus?
             if not(nopci):
                 devices.append(pci.PciBus())
@@ -283,10 +287,6 @@ class NovmManager(object):
                 tag="init",
                 read=["/init=>%s" % utils.libexec("noguest")]
             ))
-
-            # Enable user-memory.
-            devices.append(memory.UserMemory(
-                size=1024*1024*(memsize or 1024)))
 
             # Provide our state.
             with tempfile.NamedTemporaryFile() as state_file:

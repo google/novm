@@ -109,13 +109,13 @@ func (device *VirtioBlockDevice) processRequests(
 
 func NewVirtioMmioBlock(info *DeviceInfo) (Device, error) {
     device, err := NewMmioVirtioDevice(info, VirtioTypeBlock)
-    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[0] = NewVirtioChannel(0, 256)
     return &VirtioBlockDevice{VirtioDevice: device}, err
 }
 
 func NewVirtioPciBlock(info *DeviceInfo) (Device, error) {
     device, err := NewPciVirtioDevice(info, PciClassStorage, VirtioTypeBlock, 16)
-    device.Channels[0] = device.NewVirtioChannel(256)
+    device.Channels[0] = NewVirtioChannel(1, 256)
     return &VirtioBlockDevice{VirtioDevice: device}, err
 }
 

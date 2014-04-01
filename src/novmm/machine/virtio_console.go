@@ -142,10 +142,10 @@ func setupConsole(device *VirtioDevice) (Device, error) {
     device.Config.GrowTo(8)
     device.Config.Set32(4, 1)
 
-    device.Channels[0] = device.NewVirtioChannel(128)
-    device.Channels[1] = device.NewVirtioChannel(128)
-    device.Channels[2] = device.NewVirtioChannel(32)
-    device.Channels[3] = device.NewVirtioChannel(32)
+    device.Channels[0] = NewVirtioChannel(0, 128)
+    device.Channels[1] = NewVirtioChannel(1, 128)
+    device.Channels[2] = NewVirtioChannel(2, 32)
+    device.Channels[3] = NewVirtioChannel(3, 32)
 
     return &VirtioConsoleDevice{
         VirtioDevice: device}, nil
@@ -175,9 +175,11 @@ func (console *VirtioConsoleDevice) Attach(vm *platform.Vm, model *Model) error 
         return err
     }
 
-    // Ensure no reads/writes go through.
-    console.read_lock.Lock()
-    console.write_lock.Lock()
+    if !console.Opened {
+        // Ensure no reads/writes go through.
+        console.read_lock.Lock()
+        console.write_lock.Lock()
+    }
 
     // Start our console process.
     go console.ctrlConsole(console.Channels[3])

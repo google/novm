@@ -10,6 +10,7 @@ const int ExitReasonIo = KVM_EXIT_IO;
 const int ExitReasonInternalError = KVM_EXIT_INTERNAL_ERROR;
 const int ExitReasonException = KVM_EXIT_EXCEPTION;
 const int ExitReasonDebug = KVM_EXIT_DEBUG;
+const int ExitReasonShutdown = KVM_EXIT_SHUTDOWN;
 
 void* handle_exit_mmio(struct kvm_run* kvm) {
     return kvmExitMmio(

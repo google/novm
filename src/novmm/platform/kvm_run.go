@@ -53,11 +53,7 @@ func (vcpu *Vcpu) Run() error {
         // Make sure our registers are flushed.
         // This will also refresh registers after we
         // execute but are interrupted (i.e. EINTR).
-        err := vcpu.flushRegs()
-        if err != nil {
-            return err
-        }
-        err = vcpu.flushSRegs()
+        err := vcpu.flushAllRegs()
         if err != nil {
             return err
         }

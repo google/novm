@@ -4,9 +4,9 @@ package platform
 #include <linux/kvm.h>
 #include "kvm_cpuid.h"
 
-const int GetSupportedCpuid = KVM_GET_SUPPORTED_CPUID;
-const int SetCpuid = KVM_SET_CPUID2;
-const int GetCpuid = KVM_GET_CPUID2;
+const int IoctlGetSupportedCpuid = KVM_GET_SUPPORTED_CPUID;
+const int IoctlSetCpuid = KVM_SET_CPUID2;
+const int IoctlGetCpuid = KVM_GET_CPUID2;
 */
 import "C"
 
@@ -17,6 +17,8 @@ import (
 
 type Cpuid struct {
     Function uint32 `json:"function"`
+    Index    uint32 `json:"index"`
+    Flags    uint32 `json:"flags"`
 
     EAX uint32
     EBX uint32
@@ -35,7 +37,7 @@ func supportedCpuid(fd int) ([]Cpuid, error) {
         _, _, e := syscall.Syscall(
             syscall.SYS_IOCTL,
             uintptr(fd),
-            uintptr(C.GetSupportedCpuid),
+            uintptr(C.IoctlGetSupportedCpuid),
             uintptr(unsafe.Pointer(&cpuidData[0])))
 
         if e == syscall.ENOMEM {
@@ -54,6 +56,8 @@ func supportedCpuid(fd int) ([]Cpuid, error) {
     for i := 0; ; i += 1 {
         // Is there a valid function?
         var function C.__u32
+        var index C.__u32
+        var flags C.__u32
         var eax C.__u32
         var ebx C.__u32
         var ecx C.__u32
@@ -63,7 +67,12 @@ func supportedCpuid(fd int) ([]Cpuid, error) {
             unsafe.Pointer(&cpuidData[0]),
             C.int(i),
             &function,
-            &eax, &ebx, &ecx, &edx)
+            &index,
+            &flags,
+            &eax,
+            &ebx,
+            &ecx,
+            &edx)
 
         // Any left?
         if e != 0 {
@@ -73,6 +82,8 @@ func supportedCpuid(fd int) ([]Cpuid, error) {
         // Add this MSR.
         cpuids = append(cpuids, Cpuid{
             Function: uint32(function),
+            Index:    uint32(index),
+            Flags:    uint32(flags),
             EAX:      uint32(eax),
             EBX:      uint32(ebx),
             ECX:      uint32(ecx),
@@ -111,27 +122,35 @@ func defaultCpuid(fd int) ([]Cpuid, error) {
     }
 
     // Change the vendor & feature bits.
+    result := make([]Cpuid, 0, len(cpuids))
     for _, cpuid := range cpuids {
 
         if cpuid.Function == 0 {
             // Tweak our vendor.
             native_cpuid := nativeCpuid(cpuid.Function)
-            cpuid.EAX = native_cpuid.EAX
             cpuid.EBX = native_cpuid.EBX
             cpuid.ECX = native_cpuid.ECX
             cpuid.EDX = native_cpuid.EDX
+
         } else if cpuid.Function == 1 {
             // Tweak our model & APIC status.
             native_cpuid := nativeCpuid(cpuid.Function)
             cpuid.EAX = native_cpuid.EAX
             cpuid.EDX |= (1 << 9)
+
         } else if cpuid.Function == 0x80000001 {
             // Mask our NX support.
-            cpuid.EDX &= ^uint32(1 << 19)
+            // FIXME: This seems to cause the system
+            // to freeze up during boot. I'm not sure
+            // why NX support would do that, but it's
+            // a mystery that should be solved soon.
+            cpuid.EDX &= ^uint32(1 << 20)
         }
+
+        result = append(result, cpuid)
     }
 
-    return cpuids, nil
+    return result, nil
 }
 
 func (vcpu *Vcpu) SetCpuid(cpuids []Cpuid) error {
@@ -144,6 +163,8 @@ func (vcpu *Vcpu) SetCpuid(cpuids []Cpuid) error {
             C.int(PageSize),
             C.int(i),
             C.__u32(cpuid.Function),
+            C.__u32(cpuid.Index),
+            C.__u32(cpuid.Flags),
             C.__u32(cpuid.EAX),
             C.__u32(cpuid.EBX),
             C.__u32(cpuid.ECX),
@@ -157,7 +178,7 @@ func (vcpu *Vcpu) SetCpuid(cpuids []Cpuid) error {
     _, _, e := syscall.Syscall(
         syscall.SYS_IOCTL,
         uintptr(vcpu.fd),
-        uintptr(C.SetCpuid),
+        uintptr(C.IoctlSetCpuid),
         uintptr(unsafe.Pointer(&cpuidData[0])))
     if e != 0 {
         return e

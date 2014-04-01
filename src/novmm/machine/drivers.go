@@ -10,6 +10,7 @@ var drivers = map[string]Driver{
     "pit":                 NewPit,
     "acpi":                NewAcpi,
     "rtc":                 NewRtc,
+    "clock":               NewClock,
     "uart":                NewUart,
     "pci-bus":             NewPciBus,
     "pci-hostbridge":      NewPciHostBridge,

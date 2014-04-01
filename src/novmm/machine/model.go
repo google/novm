@@ -77,12 +77,15 @@ func (model *Model) Devices() []Device {
     return model.devices
 }
 
-func (model *Model) Sync(vm *platform.Vm) error {
+func (model *Model) Pause(manual bool) error {
 
-    for _, device := range model.devices {
-        // Ensure this device is up-to-date.
-        err := device.Sync(vm)
-        if err != nil {
+    for i, device := range model.devices {
+        // Ensure all devices are paused.
+        err := device.Pause(manual)
+        if err != nil && err != DeviceAlreadyPaused {
+            for i -= 1; i >= 0; i -= 1 {
+                device.Unpause(manual)
+            }
             return err
         }
     }
@@ -91,10 +94,59 @@ func (model *Model) Sync(vm *platform.Vm) error {
     return nil
 }
 
+func (model *Model) Unpause(manual bool) error {
+
+    for i, device := range model.devices {
+        // Ensure all devices are unpaused.
+        err := device.Unpause(manual)
+        if err != nil && err != DeviceAlreadyPaused {
+            for i -= 1; i >= 0; i -= 1 {
+                device.Pause(manual)
+            }
+            return err
+        }
+    }
+
+    // All good.
+    return nil
+}
+
+func (model *Model) Load(vm *platform.Vm) error {
+
+    for _, device := range model.devices {
+        // Load our device state.
+        err := device.Load(vm)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+func (model *Model) Save(vm *platform.Vm) error {
+
+    for _, device := range model.devices {
+        // Synchronize our device state.
+        err := device.Save(vm)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
 func (model *Model) DeviceInfo(vm *platform.Vm) ([]DeviceInfo, error) {
 
-    // Sychronize all devices.
-    err := model.Sync(vm)
+    err := model.Pause(false)
+    if err != nil {
+        return nil, err
+    }
+    defer model.Unpause(false)
+
+    // Synchronize our state.
+    err = model.Save(vm)
     if err != nil {
         return nil, err
     }
