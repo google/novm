@@ -126,7 +126,11 @@ func main() {
     // want to ensure we aren't using the default
     // handlers from the beginning.
     signals := make(chan os.Signal, 1)
-    signal.Notify(signals)
+    signal.Notify(
+        signals,
+        utils.SigShutdown,
+        utils.SigRestart,
+        utils.SigSpecialRestart)
 
     // Parse all command line options.
     flag.Parse()
