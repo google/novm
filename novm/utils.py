@@ -7,7 +7,7 @@ import ctypes
 import signal
 import thread
 import zipfile
-import traceback
+import hashlib
 
 def cleanup(fcn=None, *args, **kwargs):
     # We setup a safe procedure here to ensure that the
@@ -172,3 +172,49 @@ def asbool(value):
         return value.lower() == "true" or value.lower() == "yes"
     else:
         return False
+
+def copy(dst, src, sparse=False, hash=False):
+    if hash:
+        sha1 = hashlib.new('sha1')
+
+    if sparse:
+        # Grab our starting point.
+        reloff = os.lseek(src.fileno(), 0, os.SEEK_CUR)
+
+    while True:
+        # Our read size.
+        chunk = 65536
+
+        if sparse:
+            try:
+                # Find the next chunk w/ SEEK_DATA.
+                dataoffset = os.lseek(src.fileno(), reloff, 3)
+            except OSError:
+                # There is no more data.
+                break
+            skip = dataoffset - reloff
+            if skip > 0:
+                dst.seek(skip, os.SEEK_CUR)
+                reloff += skip
+
+            # Find the next hole w/ SEEK_HOLE.
+            holeoffset = os.lseek(src.fileno(), 0, 4)
+
+            # Return to the original location.
+            os.lseek(src.fileno(), dataoffset, os.SEEK_SET)
+            if holeoffset - dataoffset < 65536:
+                chunk = holeoffset - dataoffset
+
+        data = src.read(chunk)
+        if not data:
+            break
+        dst.write(data)
+        if sparse:
+            reloff += len(data)
+
+        if hash:
+            sha1.update(data)
+
+    dst.flush()
+    if hash:
+        return sha1.hexdigest()

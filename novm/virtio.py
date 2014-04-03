@@ -1,58 +1,53 @@
 """
 Virtio device specification.
 """
+
 from . import device
 
-class Device(device.Device):
+class Driver(device.Driver):
 
-    def __init__(
-            self,
-            index=0,
-            pci=False,
-            **kwargs):
-
-        super(Device, self).__init__(**kwargs)
-
-        # PCI?
-        self._pci = pci
-
-        # Are we an MMIO device?
-        # NOTE: We arbitrarily pick 0xeXXXXXXX as the
-        # start for all of our virtio devices. If we
-        # have to do anymore reservation for I/O devices,
-        # we might want to consider implemented something
-        # a bit more thorough here.
-        if not pci:
-            self._index = index
-            self._address = (0xe0000000 + index*4096)
-            self._interrupt = 32 + index
+    @staticmethod
+    def register(cls):
+        device.Driver.register(cls, driver="virtio-pci-%s" % cls.virtio_driver)
+        device.Driver.register(cls, driver="virtio-mmio-%s" % cls.virtio_driver)
 
     @property
     def virtio_driver(self):
         raise NotImplementedError()
 
-    @property
-    def driver(self):
-        if self._pci:
-            return "virtio-pci-%s" % self.virtio_driver
-        else:
-            return "virtio-mmio-%s" % self.virtio_driver
+    def create(self,
+            index=-1,
+            pci=False,
+            data=None,
+            **kwargs):
 
-    def cmdline(self):
-        if self._pci:
-            return None
-        else:
-            return "virtio-mmio.%d@0x%x:%d:%d" % (
-                self._index,
-                self._address,
-                self._interrupt,
-                self._index)
+        if data is None:
+            data = {}
 
-    def data(self):
-        if self._pci:
-            return {}
+        if pci:
+            driver = "virtio-pci-%s" % self.virtio_driver
         else:
-            return {
-                "address": self._address,
-                "interrupt": self._interrupt,
-            }
+            driver = "virtio-mmio-%s" % self.virtio_driver
+
+        if index >= 0 and not pci:
+            # Are we an MMIO device?
+            # NOTE: We arbitrarily pick 0xeXXXXXXX as the
+            # start for all of our virtio devices. If we
+            # have to do anymore reservation for I/O devices,
+            # we might want to consider implemented something
+            # a bit more thorough here.
+            data["address"] = 0xe0000000 + index*4096
+            data["interrupt"] = 32 + index
+            cmdline = "virtio-mmio.%d@0x%x:%d:%d" % (
+                index,
+                0xe0000000 + index*4096,
+                32 + index,
+                index)
+        else:
+            cmdline = None
+
+        return super(Driver, self).create(
+            data=data,
+            driver=driver,
+            cmdline=cmdline,
+            **kwargs)

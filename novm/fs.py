@@ -9,22 +9,19 @@ import shutil
 from . import utils
 from . import virtio
 
-class FS(virtio.Device):
+class FS(virtio.Driver):
 
     """ Virtio Filesystem (plan9) """
 
     virtio_driver = "fs"
 
-    def __init__(
-            self,
+    def create(self,
             tag=None,
             tempdir=None,
             read=None,
             write=None,
             fdlimit=None,
             **kwargs):
-
-        super(FS, self).__init__(**kwargs)
 
         if tag is None:
             tag = str(uuid.uuid4())
@@ -38,39 +35,33 @@ class FS(virtio.Device):
         if not os.path.exists(tempdir):
             os.makedirs(tempdir)
 
-        # Save our tag.
-        self._tag = tag
-
         # Append our read mapping.
-        self._read = {'/': []}
+        read_map = {'/': []}
         for path in read:
             spec = path.split("=>", 1)
             if len(spec) == 1:
-                self._read['/'].append(path)
+                read_map['/'].append(path)
             else:
-                if not spec[0] in self._read:
-                    self._read[spec[0]] = []
-                self._read[spec[0]].append(spec[1])
+                if not spec[0] in read_map:
+                    read_map[spec[0]] = []
+                read_map[spec[0]].append(spec[1])
 
         # Append our write mapping.
-        self._write = {'/': tempdir}
+        write_map = {'/': tempdir}
 
         for path in write:
             spec = path.split("=>", 1)
             if len(spec) == 1:
-                self._write['/'] = path
+                write_map['/'] = path
             else:
-                self._write[spec[0]] = spec[1]
+                write_map[spec[0]] = spec[1]
 
-        # Save our fdlimit.
-        # By default 0 means it will use half
-        # the process fdlimit (as reported by rlimit).
-        self._fdlimit = fdlimit or 0
+        # Create our device.
+        return super(FS, self).create(data={
+            "read": read_map,
+            "write": write_map,
+            "tag": tag,
+            "fdlimit": fdlimit or 0,
+        }, **kwargs)
 
-    def data(self):
-        return {
-            "read": self._read,
-            "write": self._write,
-            "tag": self._tag,
-            "fdlimit": self._fdlimit,
-        }
+virtio.Driver.register(FS)

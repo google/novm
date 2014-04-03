@@ -47,20 +47,19 @@ def alwaysjson(fn):
     return fn
 
 def main(args):
-    # Create a manager.
-    from . import manager
-    manager = manager.NovmManager()
+    from . import shell
+    cli = shell.NovmShell()
 
     # Build our options.
     commands = {}
     default_help = {}
 
-    for attr in dir(manager):
+    for attr in dir(cli):
         if attr.startswith('_'):
             continue
 
         # Grab our bound method.
-        fn = getattr(manager, attr)
+        fn = getattr(cli, attr)
 
         # Filter static methods.
         if not isinstance(fn, types.MethodType):

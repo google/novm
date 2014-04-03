@@ -8,7 +8,6 @@ import json
 import tempfile
 import shutil
 import urllib2
-import hashlib
 import time
 
 from . import utils
@@ -97,21 +96,13 @@ class Nodb(object):
     def fetch(self, url, **kwargs):
         obj = {"url": url}
         obj.update(kwargs.items())
-        sha1 = hashlib.new('sha1')
 
         with tempfile.NamedTemporaryFile() as tf:
             # Download the file.
             url_file = urllib2.urlopen(url)
-            while True:
-                data = url_file.read(65536)
-                if not data:
-                    break
-                sha1.update(data)
-                tf.write(data)
-            tf.flush()
+            obj_id = utils.copy(tf, url_file, hash=True)
 
-            # Get our computed id.
-            obj_id = sha1.hexdigest()
+            # Does this already exist?
             if obj_id in self.list():
                 return obj_id
 

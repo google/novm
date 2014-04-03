@@ -8,7 +8,6 @@ import random
 import subprocess
 
 from . import utils
-from . import device
 from . import virtio
 from . import ioctl
 
@@ -109,14 +108,13 @@ def tap_device(name):
 
     return tap, vnet, offload
 
-class Nic(virtio.Device):
+class Nic(virtio.Driver):
 
     """ A Virtio network device. """
 
     virtio_driver = "net"
 
-    def __init__(
-            self,
+    def create(self,
             index=None,
             mac=None,
             tapname=None,
@@ -126,25 +124,13 @@ class Nic(virtio.Device):
             mtu=None,
             **kwargs):
 
-        super(Nic, self).__init__(index=index, **kwargs)
-
         if mac is None:
             mac = random_mac()
         if tapname is None:
             tapname = "novm%d-%d" % (os.getpid(), index)
 
-        # Save our arguments.
-        self._info = {
-            "mac": mac,
-            "tapname": tapname,
-            "bridge": bridge,
-            "ip": ip,
-            "gateway": gateway,
-            "mtu": mtu,
-        }
-
         # Create our new tap device.
-        self._tap, self._vnet, self._offload = tap_device(tapname)
+        tap, vnet, offload = tap_device(tapname)
         if mtu is not None:
             subprocess.check_call(
                 ["/sbin/ip", "link", "set", "dev", tapname, "mtu", str(mtu)],
@@ -189,20 +175,18 @@ class Nic(virtio.Device):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE)
-            self._ip = address
+            ip = address
         else:
-            self._ip = None
+            ip = None
 
-    def data(self):
-        return {
-            "mac": self._info["mac"],
-            "fd": self._tap.fileno(),
-            "vnet" : self._vnet,
-            "offload" : self._offload,
-        }
+        kwargs.update({
+            "mac": mac,
+            "fd": tap.fileno(),
+            "vnet": vnet,
+            "offload": offload,
+            "ip": ip
+        })
 
-    def ip(self):
-        return self._ip
+        return Nic(data=kwargs)
 
-    def info(self):
-        return self._info
+virtio.Driver.register(Nic)

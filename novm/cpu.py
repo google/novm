@@ -1,8 +1,13 @@
 """
 Basic CPU state.
 """
+from . import state
 
-class Cpu(object):
+class Cpu(state.State):
 
-    def arg(self):
-        return {}
+    """ Basic CPU state. """
+
+    # A CPU can be modeled directly using its state,
+    # without any external links (like files or network
+    # tap devices, for example). Therefore, it is much
+    # simpler than the device model.

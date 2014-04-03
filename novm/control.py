@@ -15,12 +15,12 @@ from . import utils
 
 class Control(object):
 
-    def __init__(
-            self,
+    def __init__(self,
             path,
             bind=False,
             **kwargs):
 
+        self._sent_rpc = False
         super(Control, self).__init__(**kwargs)
 
         dirname = os.path.dirname(path)
@@ -49,8 +49,10 @@ class Control(object):
 
         # Open the socket.
         fobj = self._sock.makefile(bufsize=0)
-        fobj.write("NOVM RPC\n")
-        fobj.flush()
+        if not self._sent_rpc:
+            self._sent_rpc = True
+            fobj.write("NOVM RPC\n")
+            fobj.flush()
 
         # Write our command.
         # NOTE: This is currently not thread safe.
@@ -79,7 +81,7 @@ class Control(object):
 
     def run(self, command, env=None, cwd=None, terminal=False):
         if env is None:
-            env = ["%s=%s" % (k,v) for (k,v) in os.environ.items()]
+            env = ["%s=%s" % (k, v) for (k, v) in os.environ.items()]
         if cwd is None:
             cwd = "/"
 

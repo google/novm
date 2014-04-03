@@ -6,17 +6,14 @@ import tempfile
 
 from . import device
 
-class UserMemory(device.Device):
+class UserMemory(device.Driver):
 
     driver = "user-memory"
 
-    def __init__(
-            self,
+    def create(self,
             size=None,
             fd=None,
             **kwargs):
-
-        super(UserMemory, self).__init__(**kwargs)
 
         # No file given?
         if fd is None:
@@ -31,14 +28,24 @@ class UserMemory(device.Device):
         # Truncate the file.
         os.ftruncate(fd, size)
 
-        # Save our data.
-        self._fd = fd
-        self._size = size
+        return super(UserMemory, self).create(data={
+            "fd": fd,
+            "size": size,
+        }, **kwargs)
 
-    def data(self):
-        return {
-            "fd": self._fd,
-        }
+    def save(self, state, pid):
+        """ Open up the fd and return it back. """
+        return ({
+            # Save the size of the memory block.
+            "size": state.get("size"),
+        }, {
+            # Serialize the entire open fd.
+            "memory": open("/proc/%d/fd/%d" % (pid, state["fd"]), "r")
+        })
 
-    def info(self):
-        return self._size
+    def load(self, state, files):
+        return self.create(
+            size=state.get("size"),
+            fd=files["memory"].fileno())
+
+device.Driver.register(UserMemory)

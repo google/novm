@@ -1,7 +1,6 @@
 """
 Python adaptation of <asm-generic/ioctl.h>.
 """
-import struct
 import platform
 
 # Ioctl numbers are encoded in 32 bits:

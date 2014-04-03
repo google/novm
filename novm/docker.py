@@ -11,8 +11,7 @@ class RegistryClient(object):
     A simple client for the docker registry.
     """
 
-    def __init__(
-            self,
+    def __init__(self,
             db,
             host=None,
             registry=None,
@@ -92,8 +91,7 @@ class RegistryClient(object):
             token=token,
             host=endpoint)
 
-    def _request(
-            self,
+    def _request(self,
             url,
             method=None,
             body=None,
@@ -123,7 +121,7 @@ class RegistryClient(object):
         # Open the requested URL.
         url = "https://%s/%s" % (host, url)
         con = httplib.HTTPSConnection(host)
-        req = con.request(method, url, body=body, headers=headers)
+        con.request(method, url, body=body, headers=headers)
         resp = con.getresponse()
 
         if int(resp.status / 100) != 2:

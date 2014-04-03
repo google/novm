@@ -4,40 +4,31 @@ Console functions.
 from . import device
 from . import virtio
 
-class Console(virtio.Device):
+class Console(virtio.Driver):
 
     """ A Virtio serial/console device. """
 
     virtio_driver = "console"
 
-class Com1(device.Device):
+class Uart(device.Driver):
 
     driver = "uart"
 
-    def data(self):
-        return {
-            "base": 0x3f8,
-            "interrupt": 4,
-        }
+    def com1(self, **kwargs):
+        return self.create(data={
+                "base": 0x3f8,
+                "interrupt": 4,
+            },
+            cmdline="console=uart,io,0x3f8",
+            **kwargs)
 
-    def cmdline(self):
-        return "console=uart,io,0x3f8"
+    def com2(self, **kwargs):
+        return self.create(data={
+                "base": 0x2f8,
+                "interrupt": 3,
+            },
+            cmdline="console=uart,io,0x2f8",
+            **kwargs)
 
-    def info(self):
-        return "com1"
-
-class Com2(device.Device):
-
-    driver = "uart"
-
-    def data(self):
-        return {
-            "base": 0x2f8,
-            "interrupt": 3,
-        }
-
-    def cmdline(self):
-        return "console=uart,io,0x2f8"
-
-    def info(self):
-        return "com2"
+virtio.Driver.register(Console)
+device.Driver.register(Uart)

@@ -28,7 +28,7 @@ def prettyprint(value, output):
                 except ValueError:
                     return k
 
-            items = sorted([(try_int(k), v) for (k,v) in value.items()])
+            items = sorted([(try_int(k), v) for (k, v) in value.items()])
             keys = [x[0] for x in items]
             values = [x[1] for x in items]
 
