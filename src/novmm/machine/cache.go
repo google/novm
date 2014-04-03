@@ -1,7 +1,6 @@
 package machine
 
 import (
-    "log"
     "novmm/platform"
 )
 
@@ -10,10 +9,14 @@ import (
 //
 // Our I/O cache stores paddr => handler mappings.
 //
-// Eventually it would be nice to detect the devices that
-// get hit the most, and create an EventFd that would wait
-// on that device in order to prevent bouncing in and out
-// of the kernel. But maybe we can do that for all devices.
+// When a device returns a SaveIO error, we actually try to
+// setup an EventFD for that specific addr and value. This
+// will avoid having to go through the cache every time. We
+// do this only after accruing sufficient hits however, in
+// order to avoid wasting eventfds on devices that only hit
+// a few times (like an unused NIC, for example).
+//
+// See eventfd.go for the save() function where this is done.
 
 type IoCache struct {
 
@@ -50,57 +53,6 @@ func (cache *IoCache) lookup(addr platform.Paddr) *IoHandler {
     }
 
     // Nothing found.
-    return nil
-}
-
-func (cache *IoCache) save(
-    vm *platform.Vm,
-    addr platform.Paddr,
-    size uint,
-    value uint64,
-    fn func() error) error {
-
-    // Do we have sufficient hits?
-    if cache.hits[addr] < 100 {
-        return nil
-    }
-
-    // Bind an eventfd.
-    // NOTE: NewBoundEventFd() may return nil, nil
-    // in which case we don't have eventfds enabled.
-    boundfd, err := vm.NewBoundEventFd(addr, size, cache.is_pio, true, value)
-    if err != nil || boundfd == nil {
-        return err
-    }
-
-    log.Printf(
-        "eventfd [addr=%08x size=%x is_pio=%t value=%08x]",
-        addr,
-        size,
-        cache.is_pio,
-        value)
-
-    // Run our function.
-    go func() {
-        for {
-            // Wait for the next event.
-            _, err := boundfd.Wait()
-            if err != nil {
-                break
-            }
-
-            // Call our function.
-            // We disregard any errors on this
-            // function, since there's nothing
-            // that we can actually do here.
-            fn()
-        }
-
-        // Finished with the eventfd.
-        boundfd.Close()
-    }()
-
-    // Success.
     return nil
 }
 

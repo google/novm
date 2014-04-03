@@ -50,6 +50,7 @@ func (vm *Vm) SetEventFd(
     ioeventfd.addr = C.__u64(paddr)
     ioeventfd.len = C.__u32(size)
     ioeventfd.fd = C.__s32(eventfd.Fd())
+    ioeventfd.datamatch = C.__u64(value)
 
     if is_pio {
         ioeventfd.flags |= C.__u32(C.IoctlIoEventFdFlagPio)
@@ -59,7 +60,6 @@ func (vm *Vm) SetEventFd(
     }
     if has_value {
         ioeventfd.flags |= C.__u32(C.IoctlIoEventFdFlagDatamatch)
-        ioeventfd.datamatch = C.__u64(value)
     }
 
     // Bind / unbind the eventfd.
@@ -82,11 +82,6 @@ func (vm *Vm) NewBoundEventFd(
     is_pio bool,
     has_value bool,
     value uint64) (*BoundEventFd, error) {
-
-    // Are we enabled?
-    if !vm.use_eventfds {
-        return nil, nil
-    }
 
     // Create our system eventfd.
     eventfd, err := NewEventFd()
@@ -137,10 +132,4 @@ func (fd *BoundEventFd) Close() error {
 
     // Close the eventfd.
     return fd.Close()
-}
-
-func (vm *Vm) EnableEventFds() {
-
-    // Allow eventfds.
-    vm.use_eventfds = true
 }

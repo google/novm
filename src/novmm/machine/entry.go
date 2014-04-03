@@ -24,11 +24,9 @@ func (model *Model) Handle(
             err = cache.save(
                 vm,
                 addr,
-                ioevent.Size(),
-                ioevent.GetData(),
-                func() error {
-                    return handler.queue.Submit(ioevent, offset)
-                })
+                handler,
+                ioevent,
+                offset)
         }
 
         // Return to our vcpu.

@@ -5,7 +5,6 @@ package platform
 #include <sys/eventfd.h>
 
 const int EfdCloExec = EFD_CLOEXEC;
-const int EfdNonBlock = EFD_NONBLOCK;
 */
 import "C"
 
@@ -21,7 +20,7 @@ import (
 // network hub. Not so simple. That's all in the net
 // namespace, and very much network-specific.
 //
-// So... for now, this will just use non-blocking system
+// So... for now, this will just use blocking system
 // calls. It's relatively lightweight and we're not scaling
 // to thousands of concurrent goroutines, just dozens.
 //

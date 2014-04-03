@@ -22,9 +22,6 @@ var control_fd = flag.Int("controlfd", -1, "bound control socket")
 // Machine state.
 var statefd = flag.Int("statefd", 0, "machine state file")
 
-// Functional flags.
-var eventfds = flag.Bool("eventfds", false, "enable eventfds")
-
 // Guest-related flags.
 var real_init = flag.Bool("init", false, "real in-guest init?")
 
@@ -111,7 +108,6 @@ func restart(
         os.Args[0],
         fmt.Sprintf("-controlfd=%d", *control_fd),
         fmt.Sprintf("-statefd=%d", state_fd),
-        fmt.Sprintf("-eventfds=%t", *eventfds),
         fmt.Sprintf("-trace=%t", is_tracing),
         fmt.Sprintf("-paused=%t", *paused),
         fmt.Sprintf("-stop=%t", stop),
@@ -154,10 +150,6 @@ func main() {
         utils.Die(err)
     }
     defer vm.Dispose()
-
-    if *eventfds {
-        vm.EnableEventFds()
-    }
 
     // Create the machine model.
     model, err := machine.NewModel(vm)

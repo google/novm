@@ -39,9 +39,6 @@ type Vm struct {
     // The size of the vcpu mmap structs.
     mmap_size int
 
-    // Eventfds are enabled?
-    use_eventfds bool
-
     // Our vcpus.
     vcpus []*Vcpu
 }
