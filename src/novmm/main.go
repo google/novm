@@ -1,7 +1,6 @@
 package main
 
 import (
-    "encoding/json"
     "flag"
     "fmt"
     "io/ioutil"
@@ -10,6 +9,7 @@ import (
     "novmm/loader"
     "novmm/machine"
     "novmm/platform"
+    "novmm/utils"
     "os"
     "os/signal"
     "strings"
@@ -89,8 +89,8 @@ func restart(
     if err != nil {
         return err
     }
-    json_encoder := json.NewEncoder(state_file)
-    err = json_encoder.Encode(&state)
+    encoder := utils.NewEncoder(state_file)
+    err = encoder.Encode(&state)
     if err != nil {
         return err
     }
@@ -116,10 +116,6 @@ func restart(
     return syscall.Exec(bin, cmd, os.Environ())
 }
 
-func die(err error) {
-    log.Fatal(err)
-}
-
 func main() {
     // Parse all command line options.
     flag.Parse()
@@ -127,7 +123,7 @@ func main() {
     // Create VM.
     vm, err := platform.NewVm()
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
     defer vm.Dispose()
     if *eventfds {
@@ -137,17 +133,16 @@ func main() {
     // Create the machine model.
     model, err := machine.NewModel(vm)
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
 
     // Load our machine state.
     state_file := os.NewFile(uintptr(*statefd), "state")
-    json_decoder := json.NewDecoder(state_file)
-    json_decoder.UseNumber()
+    decoder := utils.NewDecoder(state_file)
     state := new(control.State)
-    err = json_decoder.Decode(&state)
+    err = decoder.Decode(&state)
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
 
     // We're done with the state file.
@@ -156,16 +151,16 @@ func main() {
     // Load all devices.
     proxy, err := model.LoadDevices(vm, state.Devices, *debug)
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
 
     // Load all vcpus.
     vcpus, err := vm.LoadVcpus(state.Vcpus)
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
     if len(vcpus) == 0 {
-        die(NoVcpus)
+        utils.Die(NoVcpus)
     }
 
     // Enable stepping if requested.
@@ -195,7 +190,7 @@ func main() {
             *cmdline,
             *system_map)
         if err != nil {
-            die(err)
+            utils.Die(err)
         }
 
         // This is a fresh boot.
@@ -232,7 +227,7 @@ func main() {
         is_load)
 
     if err != nil {
-        die(err)
+        utils.Die(err)
     }
     go control.Serve()
 
@@ -261,7 +256,7 @@ func main() {
                 // Make sure we have control sync'ed.
                 _, err := control.Ready()
                 if err != nil {
-                    die(err)
+                    utils.Die(err)
                 }
 
                 // This is a bit of a special case.
@@ -274,7 +269,7 @@ func main() {
 
         // Everything died?
         if vcpus_alive == 0 {
-            die(NoVcpus)
+            utils.Die(NoVcpus)
         }
     }
 }

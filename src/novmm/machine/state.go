@@ -2,9 +2,9 @@ package machine
 
 import (
     "bytes"
-    "encoding/json"
     "log"
     "novmm/platform"
+    "novmm/utils"
 )
 
 type DeviceInfo struct {
@@ -40,8 +40,8 @@ func (info DeviceInfo) Load() (Device, error) {
         buffer := bytes.NewBuffer(nil)
 
         // Encode the original object.
-        json_encoder := json.NewEncoder(buffer)
-        err = json_encoder.Encode(info.Data)
+        encoder := utils.NewEncoder(buffer)
+        err = encoder.Encode(info.Data)
         if err != nil {
             return nil, err
         }
@@ -49,11 +49,9 @@ func (info DeviceInfo) Load() (Device, error) {
         // Decode a new object.
         // This will override all the default
         // settings in the initialized object.
-        json_decoder := json.NewDecoder(buffer)
-        json_decoder.UseNumber()
-
+        decoder := utils.NewDecoder(buffer)
         log.Printf("Loading %s...", device.Name())
-        err = json_decoder.Decode(device)
+        err = decoder.Decode(device)
         if err != nil {
             return nil, err
         }

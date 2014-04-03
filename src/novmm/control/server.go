@@ -1,13 +1,13 @@
 package control
 
 import (
-    "encoding/json"
     "net/rpc"
     "net/rpc/jsonrpc"
     noguest "noguest/rpc"
     "novmm/loader"
     "novmm/machine"
     "novmm/platform"
+    "novmm/utils"
     "os"
     "sync"
     "syscall"
@@ -71,9 +71,8 @@ func (control *Control) handle(
 
     if header == "NOVM RUN\n" {
 
-        decoder := json.NewDecoder(control_file)
-        encoder := json.NewEncoder(control_file)
-        decoder.UseNumber()
+        decoder := utils.NewDecoder(control_file)
+        encoder := utils.NewEncoder(control_file)
 
         var start noguest.StartCommand
         err := decoder.Decode(&start)
