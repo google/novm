@@ -32,7 +32,7 @@ TUNGETVNETHDRSZ = ioctl._IOR(ord('T'), 215, 4)
 def random_mac(oui="28:48:46"):
     """ Return a random MAC address. """
     suffix = ":".join(
-        ["%x" % random.randint(1, 254)
+        ["%02x" % random.randint(1, 254)
          for _ in range(3)])
     return "%s:%s" % (oui, suffix)
 
@@ -179,14 +179,12 @@ class Nic(virtio.Driver):
         else:
             ip = None
 
-        kwargs.update({
-            "mac": mac,
-            "fd": tap.fileno(),
-            "vnet": vnet,
-            "offload": offload,
-            "ip": ip
-        })
-
-        return Nic(data=kwargs)
+        return super(Nic, self).create(data={
+                "mac": mac,
+                "fd": os.dup(tap.fileno()),
+                "vnet": vnet,
+                "offload": offload,
+                "ip": ip
+            }, **kwargs)
 
 virtio.Driver.register(Nic)

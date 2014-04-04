@@ -23,11 +23,9 @@ class Disk(virtio.Driver):
         # Open the device.
         f = open(filename, 'r+b')
 
-        kwargs.update({
-            "dev": dev,
-            "fd": f.fileno(),
-        })
-
-        return super(Disk, self).create(data=kwargs)
+        return super(Disk, self).create(data={
+                "dev": dev,
+                "fd": os.dup(f.fileno()),
+            }, **kwargs)
 
 virtio.Driver.register(Disk)
