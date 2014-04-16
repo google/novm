@@ -343,9 +343,15 @@ func (fs *Fs) Handle(req Buffer, resp Buffer, debug bool) error {
         }
 
     case Twstat:
-        err = fs.wstat(fid, &fcall.Dir)
+        var dir *Dir
+        dir, err = fs.wstat(fid, &fcall.Dir)
         if err == nil {
             err = PackRwstat(resp, fcall.Tag)
+        }
+        if err == nil {
+            err = fs.wstatPost(fid, dir, &fcall.Dir)
+        } else {
+            fs.wstatFail(fid, dir, &fcall.Dir)
         }
 
     default:
@@ -415,17 +421,6 @@ func (fs *Fs) Attach() error {
     fs.root, err = fs.lookup("/")
     if err != nil {
         return err
-    }
-
-    // Restore all our Fids.
-    // We know that everything in the pool
-    // should have exactly one reference.
-    for _, fid := range fs.Pool {
-        fid.file, err = fs.lookup(fid.Path)
-        if err != nil {
-            return err
-        }
-        fid.refs = 1
     }
 
     if fs.Fdlimit == 0 {

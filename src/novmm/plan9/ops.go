@@ -8,6 +8,7 @@ import (
     "math"
     "novmm/platform"
     "path"
+    "syscall"
 )
 
 func (fs *Fs) version(
@@ -293,7 +294,7 @@ func (fs *Fs) readFile(
     // special case in the main fs loop.
 
     // Lock the file for reading.
-    err := fid.file.lockRead(fs, offset, length)
+    err := fid.file.lockRead(fs)
     return fid.file.read_fd, err
 }
 
@@ -332,7 +333,7 @@ func (fs *Fs) writeFile(
     offset int64,
     count int) (int, error) {
 
-    err := fid.file.lockWrite(fs, offset, count)
+    err := fid.file.lockWrite(fs)
     return fid.file.write_fd, err
 }
 
@@ -387,35 +388,97 @@ func (fs *Fs) stat(fid *Fid) (*Dir, error) {
     return fid.file.dir(path.Base(fid.Path), true)
 }
 
-func (fs *Fs) wstat(fid *Fid, dir *Dir) error {
+func (fs *Fs) wstat(fid *Fid, next *Dir) (*Dir, error) {
+
+    // Can we write to the file?
+    err := fid.file.lockWrite(fs)
+    if err != nil {
+        return nil, err
+    }
 
     // Grab underlying information.
     cur, err := fs.stat(fid)
     if err != nil {
-        return err
+        fid.file.unlock()
+        return nil, err
     }
 
-    // FIXME: Update attributes.
-    if dir.Atime != math.MaxUint32 {
-    }
-    if dir.Mtime != math.MaxUint32 {
-    }
-    if dir.Length != math.MaxUint32 &&
-        dir.Length != cur.Length {
-    }
-    if dir.Name != "" &&
-        dir.Name != cur.Name {
-    }
-    if dir.Uidnum != math.MaxUint32 &&
-        dir.Uidnum != cur.Uidnum {
-    }
-    if dir.Gidnum != math.MaxUint32 &&
-        dir.Gidnum != cur.Gidnum {
-    }
-    if dir.Muidnum != math.MaxUint32 &&
-        dir.Muidnum != cur.Muidnum {
+    if next.Muidnum != math.MaxUint32 &&
+        next.Muidnum != cur.Muidnum {
+        // Not supported.
+        fid.file.unlock()
+        return nil, Enotimpl
     }
 
-    // Not supported.
-    return Enotimpl
+    return cur, nil
+}
+
+func (fs *Fs) wstatPost(fid *Fid, cur *Dir, next *Dir) error {
+
+    defer fid.file.unlock()
+
+    // Rename the file.
+    if next.Name != "" &&
+        next.Name != cur.Name {
+
+        new_path := path.Join(path.Dir(fid.Path), next.Name)
+        err := fid.file.rename(fs, fid.Path, new_path)
+        if err != nil {
+            return err
+        }
+    }
+
+    // Update our access times.
+    atime := cur.Atime
+    mtime := cur.Atime
+    if next.Atime != math.MaxUint32 {
+        atime = next.Atime
+    }
+    if next.Mtime != math.MaxUint32 {
+        mtime = next.Mtime
+    }
+    if atime != cur.Atime || mtime != cur.Mtime {
+        err := syscall.Futimes(
+            fid.file.write_fd,
+            []syscall.Timeval{
+                syscall.Timeval{int64(atime), 0},
+                syscall.Timeval{int64(mtime), 0},
+            })
+        if err != nil {
+            return err
+        }
+    }
+
+    // Truncate the file.
+    if next.Length != math.MaxUint64 &&
+        next.Length != cur.Length {
+        err := syscall.Ftruncate(fid.file.write_fd, int64(next.Length))
+        if err != nil {
+            return err
+        }
+    }
+
+    // Change the owner.
+    uid := cur.Uidnum
+    gid := cur.Gidnum
+    if next.Uidnum != math.MaxUint32 &&
+        next.Uidnum != cur.Uidnum {
+        uid = next.Uidnum
+    }
+    if next.Gidnum != math.MaxUint32 &&
+        next.Gidnum != cur.Gidnum {
+        gid = next.Gidnum
+    }
+    if uid != cur.Uidnum || gid != cur.Gidnum {
+        err := syscall.Fchown(fid.file.write_fd, int(uid), int(gid))
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+func (fs *Fs) wstatFail(fid *Fid, cur *Dir, next *Dir) {
+    fid.file.unlock()
 }

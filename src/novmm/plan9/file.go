@@ -529,7 +529,7 @@ func (file *File) create(
         }
 
         file.RWMutex.Unlock()
-        err = file.lockWrite(fs, 0, 0)
+        err = file.lockWrite(fs)
         if err != nil {
             return err
         }
@@ -550,10 +550,69 @@ func (file *File) create(
     return nil
 }
 
-func (file *File) lockWrite(
+func (file *File) rename(
     fs *Fs,
-    offset int64,
-    length int) error {
+    orig_path string,
+    new_path string) error {
+
+    fs.filesLock.Lock()
+    other_file, ok := fs.files[new_path]
+    if ok && other_file.exists() {
+        fs.filesLock.Unlock()
+        return Eexist
+    }
+
+    // Try the rename.
+    orig_read_path := file.read_path
+    orig_write_path := file.write_path
+    file.findPaths(fs, new_path)
+    err := syscall.Rename(orig_write_path, file.write_path)
+    if err != nil {
+        if err == syscall.EXDEV {
+            // TODO: The file cannot be renamed across file system.
+            // This is a simple matter of copying the file across when
+            // this happens. For now, we just return not implemented.
+            err = Enotimpl
+        }
+
+        file.read_path = orig_read_path
+        file.write_path = orig_write_path
+        fs.filesLock.Unlock()
+        return err
+    }
+
+    // Update our fids.
+    // This is a bit messy, but since we are
+    // holding a writeLock on this file, this
+    // atomic should be reasonably atomic.
+    for _, fid := range fs.Pool {
+        if fid.file == file {
+            fid.Path = new_path
+        } else if other_file != nil && fid.file == other_file {
+            // Since we hold at least one reference
+            // to other_file, this should never trigger
+            // a full cleanup of other_file. It's safe
+            // to call DecRef here while locking the lock.
+            file.IncRef(fs)
+            fid.file = file
+            other_file.DecRef(fs, "")
+        }
+    }
+
+    // Perform the swaperoo.
+    fs.files[new_path] = file
+    delete(fs.files, orig_path)
+    fs.filesLock.Unlock()
+
+    // Drop the original reference.
+    // (We've not replaced it atomically).
+    if other_file != nil {
+        other_file.DecRef(fs, "")
+    }
+    return nil
+}
+
+func (file *File) lockWrite(fs *Fs) error {
 
     file.RWMutex.RLock()
     if file.write_fd != -1 {
@@ -567,7 +626,7 @@ func (file *File) lockWrite(
     if file.write_fd != -1 {
         // Race caught.
         file.RWMutex.Unlock()
-        return file.lockWrite(fs, offset, length)
+        return file.lockWrite(fs)
     }
 
     // NOTE: All files are opened CLOEXEC.
@@ -633,13 +692,10 @@ func (file *File) lockWrite(
 
     // Retry (for the RLock).
     file.RWMutex.Unlock()
-    return file.lockWrite(fs, offset, length)
+    return file.lockWrite(fs)
 }
 
-func (file *File) lockRead(
-    fs *Fs,
-    offset int64,
-    length int) error {
+func (file *File) lockRead(fs *Fs) error {
 
     file.RWMutex.RLock()
     if file.read_fd != -1 {
@@ -653,14 +709,14 @@ func (file *File) lockRead(
     if file.read_fd != -1 {
         // Race caught.
         file.RWMutex.Unlock()
-        return file.lockRead(fs, offset, length)
+        return file.lockRead(fs)
     }
     if file.write_fd != -1 {
         // Use the same Fd.
         // The close logic handles this.
         file.read_fd = file.write_fd
         file.RWMutex.Unlock()
-        return file.lockRead(fs, offset, length)
+        return file.lockRead(fs)
     }
 
     // Okay, no write available.
@@ -676,7 +732,7 @@ func (file *File) lockRead(
 
     // Retry (for the RLock).
     file.RWMutex.Unlock()
-    return file.lockRead(fs, offset, length)
+    return file.lockRead(fs)
 }
 
 func (file *File) flush() {
@@ -845,7 +901,9 @@ func (file *File) DecRef(fs *Fs, path string) {
         }
 
         // Remove this file.
-        delete(fs.files, path)
+        if path != "" {
+            delete(fs.files, path)
+        }
         fs.filesLock.Unlock()
 
         // Ensure that file is removed from the LRU.
