@@ -556,10 +556,25 @@ func (file *File) rename(
     new_path string) error {
 
     fs.filesLock.Lock()
+    defer fs.filesLock.Unlock()
+
     other_file, ok := fs.files[new_path]
     if ok && other_file.exists() {
-        fs.filesLock.Unlock()
         return Eexist
+    }
+
+    // Drop the original reference.
+    // (We've not replaced it atomically).
+    if other_file != nil {
+        defer other_file.DecRef(fs, "")
+    }
+
+    if file.write_exists && file.write_deleted {
+        // Is it just marked deleted?
+        err := file.unlink()
+        if err != nil {
+            return err
+        }
     }
 
     // Try the rename.
@@ -577,9 +592,13 @@ func (file *File) rename(
 
         file.read_path = orig_read_path
         file.write_path = orig_write_path
-        fs.filesLock.Unlock()
         return err
     }
+
+    // We've moved this file.
+    // It didn't exist a moment ago, but it does now.
+    file.write_exists = true
+    file.write_deleted = false
 
     // Update our fids.
     // This is a bit messy, but since we are
@@ -602,13 +621,13 @@ func (file *File) rename(
     // Perform the swaperoo.
     fs.files[new_path] = file
     delete(fs.files, orig_path)
-    fs.filesLock.Unlock()
 
-    // Drop the original reference.
-    // (We've not replaced it atomically).
-    if other_file != nil {
-        other_file.DecRef(fs, "")
-    }
+    // Ensure the original file is deleted.
+    // This is done at the very end, since there's
+    // really nothing we can do at this point. We
+    // even explicitly ignore the result. Ugh.
+    setdelattr(orig_write_path)
+
     return nil
 }
 
