@@ -189,9 +189,17 @@ func (fs *Fs) create(
     // this directory. We should be checking that
     // this user can write to this directory.
 
-    // Can't create special files if not 9P2000.u */
-    if (perm&(DMNAMEDPIPE|DMSYMLINK|DMLINK|DMDEVICE|DMSOCKET)) != 0 && !fs.Dotu {
+    // Can't create special files if not 9P2000.u.
+    if perm&(DMNAMEDPIPE|DMSYMLINK|DMLINK|DMDEVICE|DMSOCKET) != 0 && !fs.Dotu {
         return nil, nil, 0, Eperm
+    }
+
+    // FIXME: We don't currently support creation of
+    // symlinks. This should be relatively straight-forward,
+    // but needs to be appropriately plumbed through. This
+    // work will be done in a future commit.
+    if perm&(DMNAMEDPIPE|DMSYMLINK|DMLINK|DMDEVICE|DMSOCKET) != 0 {
+        return nil, nil, 0, Enotimpl
     }
 
     // Compute our new mode.

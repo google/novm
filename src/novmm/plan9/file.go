@@ -145,7 +145,7 @@ func (file *File) findPaths(fs *Fs, filepath string) {
         filepath[len(write_prefix):])
 
     var stat syscall.Stat_t
-    err := syscall.Stat(file.write_path, &stat)
+    err := syscall.Lstat(file.write_path, &stat)
     if err == nil {
         file.write_exists = true
         file.write_deleted, _ = readdelattr(file.write_path)
@@ -171,7 +171,7 @@ func (file *File) findPaths(fs *Fs, filepath string) {
 
                 // Does this file exist?
                 test_path := path.Join(backing_path, filepath[len(prefix):])
-                err := syscall.Stat(test_path, &stat)
+                err := syscall.Lstat(test_path, &stat)
                 if err == nil {
                     // Check if it's deleted.
                     // NOTE: If we can't read the extended
@@ -374,7 +374,7 @@ func (file *File) unlink() error {
     }
 
     var stat syscall.Stat_t
-    err := syscall.Stat(file.write_path, &stat)
+    err := syscall.Lstat(file.write_path, &stat)
     if err == nil {
         if stat.Mode&syscall.S_IFDIR != 0 {
             err = syscall.Rmdir(file.write_path)
@@ -789,7 +789,7 @@ func (file *File) dir(
     }
 
     var stat syscall.Stat_t
-    err := syscall.Stat(stat_path, &stat)
+    err := syscall.Lstat(stat_path, &stat)
     if locked {
         file.RWMutex.RUnlock()
     }
@@ -829,6 +829,23 @@ func (file *File) dir(
         if stat.Mode&mask == mask {
             dir.Mode = dir.Mode | mode_bit
         }
+    }
+
+    // Read our symlink if available.
+    if dir.Type&QTSYMLINK != 0 || dir.Mode&DMSYMLINK != 0 {
+        dir.Ext, err = os.Readlink(stat_path)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    // Plan9 doesn't handle dir+symlink.
+    // We return just a raw symlink.
+    if dir.Type&QTDIR != 0 && dir.Type&QTSYMLINK != 0 {
+        dir.Type &= ^uint16(QTDIR)
+    }
+    if dir.Mode&DMDIR != 0 && dir.Mode&DMSYMLINK != 0 {
+        dir.Mode &= ^uint32(DMDIR)
     }
 
     return dir, nil
