@@ -95,6 +95,7 @@ class Control(object):
         start_cmd = {
             "command": command,
             "environment": env,
+            "terminal": terminal,
             "cwd": cwd,
         }
         json.dump(start_cmd, fobj)

@@ -27,7 +27,7 @@ func (server *Server) Write(
 
     // Push the write.
     for len(write.Data) > 0 {
-        n, err := process.terminal.Write(write.Data)
+        n, err := process.input.Write(write.Data)
         out.Written += n
         write.Data = write.Data[n:]
         if err != nil {

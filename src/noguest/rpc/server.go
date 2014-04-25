@@ -11,8 +11,9 @@ import (
 
 type Process struct {
 
-    // The terminal.
-    terminal *os.File
+    // The files.
+    input  *os.File
+    output *os.File
 
     // The start time.
     starttime time.Time
@@ -56,7 +57,10 @@ func (process *Process) close() {
 
     // Simulate an exit.
     process.setExitcode(1)
-    process.terminal.Close()
+    process.input.Close()
+    if process.input != process.output {
+        process.output.Close()
+    }
 }
 
 type Server struct {

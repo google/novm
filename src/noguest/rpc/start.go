@@ -27,6 +27,9 @@ type StartCommand struct {
     // The working directory.
     Cwd string `json:"cwd"`
 
+    // Allocate a terminal?
+    Terminal bool `json:"terminal"`
+
     // The environment.
     Environment []string `json:"environment"`
 }
@@ -74,61 +77,104 @@ func (server *Server) Start(
         return syscall.ENOENT
     }
 
-    // Open a master terminal Fd.
-    fd, err := C.posix_openpt(syscall.O_RDWR | syscall.O_NOCTTY)
-    if fd == C.int(-1) && err != nil {
-        // Out of FDs?
-        result.Pid = -1
-        return err
-    }
+    var input *os.File
+    var output *os.File
 
-    // Save our master.
-    terminal := os.NewFile(uintptr(fd), "ptmx")
+    var stdin *os.File
+    var stdout *os.File
+    var stderr *os.File
 
-    // Try to grant and unlock the PT.
-    r, err := C.grantpt(C.int(terminal.Fd()))
-    if r != C.int(0) && err != nil {
-        terminal.Close()
-        result.Pid = -1
-        return err
-    }
-    r, err = C.unlockpt(C.int(terminal.Fd()))
-    if r != C.int(0) && err != nil {
-        terminal.Close()
-        result.Pid = -1
-        return err
-    }
+    if command.Terminal {
+        // Open a master terminal Fd.
+        fd, err := C.posix_openpt(syscall.O_RDWR | syscall.O_NOCTTY)
+        if fd == C.int(-1) && err != nil {
+            // Out of FDs?
+            result.Pid = -1
+            return err
+        }
 
-    // Get the terminal name.
-    buf := make([]byte, 1024, 1024)
-    r, err = C.ptsname_r(
-        C.int(terminal.Fd()),
-        (*C.char)(unsafe.Pointer(&buf[0])),
-        1024)
-    if r != C.int(0) && err != nil {
-        terminal.Close()
-        result.Pid = -1
-        return err
-    }
+        // Save our master.
+        master := os.NewFile(uintptr(fd), "ptmx")
 
-    // Open the slave terminal.
-    n := bytes.Index(buf, []byte{0})
-    slave_pts := string(buf[:n])
-    slave, err := os.OpenFile(slave_pts, syscall.O_RDWR|syscall.O_NOCTTY, 0)
-    if err != nil {
-        terminal.Close()
-        result.Pid = -1
-        return err
+        // Try to grant and unlock the PT.
+        r, err := C.grantpt(C.int(master.Fd()))
+        if r != C.int(0) && err != nil {
+            master.Close()
+            result.Pid = -1
+            return err
+        }
+        r, err = C.unlockpt(C.int(master.Fd()))
+        if r != C.int(0) && err != nil {
+            master.Close()
+            result.Pid = -1
+            return err
+        }
+
+        // Get the terminal name.
+        buf := make([]byte, 1024, 1024)
+        r, err = C.ptsname_r(
+            C.int(master.Fd()),
+            (*C.char)(unsafe.Pointer(&buf[0])),
+            1024)
+        if r != C.int(0) && err != nil {
+            master.Close()
+            result.Pid = -1
+            return err
+        }
+
+        // Open the slave terminal.
+        n := bytes.Index(buf, []byte{0})
+        slave_pts := string(buf[:n])
+        slave, err := os.OpenFile(slave_pts, syscall.O_RDWR|syscall.O_NOCTTY, 0)
+        if err != nil {
+            master.Close()
+            result.Pid = -1
+            return err
+        }
+
+        defer slave.Close()
+
+        // Set our inputs.
+        input = master
+        output = master
+        stdin = slave
+        stdout = slave
+        stderr = slave
+
+    } else {
+        // Allocate pipes.
+        r1, w1, err := os.Pipe()
+        if err != nil {
+            result.Pid = -1
+            return err
+        }
+        r2, w2, err := os.Pipe()
+        if err != nil {
+            r1.Close()
+            w1.Close()
+            result.Pid = -1
+            return err
+        }
+
+        defer r1.Close()
+        defer w2.Close()
+
+        // Set our inputs.
+        input = w1
+        output = r2
+        stdin = r1
+        stdout = w2
+        stderr = w2
     }
 
     // Start the process.
     proc_attr := &os.ProcAttr{
         Dir:   command.Cwd,
         Env:   command.Environment,
-        Files: []*os.File{slave, slave, slave},
+        Files: []*os.File{stdin, stdout, stderr},
         Sys: &syscall.SysProcAttr{
             Setsid:  true,
-            Setctty: true,
+            Setctty: command.Terminal,
             Ctty:    0,
         },
     }
@@ -137,19 +183,20 @@ func (server *Server) Start(
         command.Command,
         proc_attr)
 
-    // Close our slave.
-    slave.Close()
-
     // Unable to start?
     if err != nil {
-        terminal.Close()
+        input.Close()
+        if input != output {
+            output.Close()
+        }
         result.Pid = -1
         return err
     }
 
     // Create our process.
     process := &Process{
-        terminal:  terminal,
+        input:     input,
+        output:    output,
         starttime: time.Now(),
         cond:      sync.NewCond(&sync.Mutex{}),
     }

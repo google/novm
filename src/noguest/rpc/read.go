@@ -27,7 +27,7 @@ func (server *Server) Read(
 
     // Read available data.
     buffer := make([]byte, read.N, read.N)
-    n, err := process.terminal.Read(buffer)
+    n, err := process.output.Read(buffer)
     if n > 0 {
         result.Data = buffer[:n]
     } else {
