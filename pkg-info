@@ -1,4 +1,4 @@
 # Basic package information.
-MAINTAINER ?= Adin Scannell <adin@scannell.ca>
+MAINTAINER ?= Adin Scannell <ascannell@google.com>
 SUMMARY ?= A high-performance, next-generation hypervisor written in Go.
-URL ?= http://github.com/gridcentric/novm
+URL ?= http://code.google.com/p/novm/
