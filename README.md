@@ -70,21 +70,17 @@ What are the disadvantages over containers?
 
 * Performance.
 
-Okay, so there's a tiny hit. If your workload is very I/O
+Okay, so there's a non-trivial hit. If your workload is very I/O
 intensive (massive disk or network usage), you will see a small
 but measurable drop in performance. But most workloads will not
 see a difference.
 
+(Note that this project is still experimental, and there's plenty
+of performance work still to be done. The above should be considered
+a forward-looking statement.)
+
 What are the advantages over traditional virtualization?
 --------------------------------------------------------
-
-* Performance.
-
-*novm* is built from the ground-up to be as simple and fast
-as possible. It aims to be highly concurrent and highly scalable
-for running large, next-generation cloud workloads. Traditional
-virtualization platforms have placed an emphasis on compatibility
-first, then on performance. (Not to say they aren't amazing.)
 
 * File-based provisioning.
 
