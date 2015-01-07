@@ -58,8 +58,8 @@ go-bench:
 	$(call go_build,go test -bench=".*" novmm)
 	$(call go_build,go test -bench=".*" noguest)
 go-fmt:
-	$(call go_build,gofmt -l=true -w=true -tabs=false -tabwidth=4 src/novmm/$*)
-	$(call go_build,gofmt -l=true -w=true -tabs=false -tabwidth=4 src/noguest/$*)
+	$(call go_build,gofmt -l=true -w=true  src/novmm/$*)
+	$(call go_build,gofmt -l=true -w=true  src/noguest/$*)
 
 test: go-test
 .PHONY: test
