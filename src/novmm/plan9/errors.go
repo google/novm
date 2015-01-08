@@ -18,7 +18,7 @@
 package plan9
 
 import (
-    "errors"
+	"errors"
 )
 
 // Global errors.

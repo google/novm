@@ -15,7 +15,7 @@
 package platform
 
 import (
-    "errors"
+	"errors"
 )
 
 // Serialization.

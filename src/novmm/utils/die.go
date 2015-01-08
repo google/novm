@@ -15,9 +15,9 @@
 package utils
 
 import (
-    "log"
+	"log"
 )
 
 func Die(err error) {
-    log.Fatal(err)
+	log.Fatal(err)
 }

@@ -15,9 +15,9 @@
 package control
 
 import (
-    "novmm/loader"
-    "novmm/machine"
-    "novmm/platform"
+	"novmm/loader"
+	"novmm/machine"
+	"novmm/platform"
 )
 
 //
@@ -29,26 +29,26 @@ import (
 //
 
 type Rpc struct {
-    // Our device model.
-    model *machine.Model
+	// Our device model.
+	model *machine.Model
 
-    // Our underlying Vm object.
-    vm  *platform.Vm
+	// Our underlying Vm object.
+	vm *platform.Vm
 
-    // Our tracer.
-    tracer *loader.Tracer
+	// Our tracer.
+	tracer *loader.Tracer
 }
 
 func NewRpc(
-    model *machine.Model,
-    vm *platform.Vm,
-    tracer *loader.Tracer) *Rpc {
+	model *machine.Model,
+	vm *platform.Vm,
+	tracer *loader.Tracer) *Rpc {
 
-    return &Rpc{
-        model:  model,
-        vm:     vm,
-        tracer: tracer,
-    }
+	return &Rpc{
+		model:  model,
+		vm:     vm,
+		tracer: tracer,
+	}
 }
 
 //

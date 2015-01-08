@@ -19,9 +19,9 @@ package control
 //
 
 func (rpc *Rpc) Pause(nopin *Nop, nopout *Nop) error {
-    return rpc.vm.Pause(true)
+	return rpc.vm.Pause(true)
 }
 
 func (rpc *Rpc) Unpause(nopin *Nop, nopout *Nop) error {
-    return rpc.vm.Unpause(true)
+	return rpc.vm.Unpause(true)
 }

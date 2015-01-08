@@ -15,7 +15,7 @@
 package loader
 
 import (
-    "errors"
+	"errors"
 )
 
 // Linux errors.

@@ -32,9 +32,9 @@ const int MpStateSipiReceived = KVM_MP_STATE_SIPI_RECEIVED;
 import "C"
 
 import (
-    "encoding/json"
-    "syscall"
-    "unsafe"
+	"encoding/json"
+	"syscall"
+	"unsafe"
 )
 
 //
@@ -49,81 +49,81 @@ var MpStateHalted = MpState(C.MpStateHalted)
 var MpStateSipiReceived = MpState(C.MpStateSipiReceived)
 
 var stateMap = map[MpState]string{
-    MpStateRunnable:      "runnable",
-    MpStateUninitialized: "uninitialized",
-    MpStateInitReceived:  "init-received",
-    MpStateHalted:        "halted",
-    MpStateSipiReceived:  "sipi-received",
+	MpStateRunnable:      "runnable",
+	MpStateUninitialized: "uninitialized",
+	MpStateInitReceived:  "init-received",
+	MpStateHalted:        "halted",
+	MpStateSipiReceived:  "sipi-received",
 }
 
 var stateRevMap = map[string]MpState{
-    "runnable":      MpStateRunnable,
-    "uninitialized": MpStateUninitialized,
-    "init-received": MpStateInitReceived,
-    "halted":        MpStateHalted,
-    "sipi-received": MpStateSipiReceived,
+	"runnable":      MpStateRunnable,
+	"uninitialized": MpStateUninitialized,
+	"init-received": MpStateInitReceived,
+	"halted":        MpStateHalted,
+	"sipi-received": MpStateSipiReceived,
 }
 
 func (vcpu *Vcpu) GetMpState() (MpState, error) {
 
-    // Execute the ioctl.
-    var kvm_state C.struct_kvm_mp_state
-    _, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(vcpu.fd),
-        uintptr(C.IoctlGetMpState),
-        uintptr(unsafe.Pointer(&kvm_state)))
-    if e != 0 {
-        return MpState(kvm_state.mp_state), e
-    }
+	// Execute the ioctl.
+	var kvm_state C.struct_kvm_mp_state
+	_, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(vcpu.fd),
+		uintptr(C.IoctlGetMpState),
+		uintptr(unsafe.Pointer(&kvm_state)))
+	if e != 0 {
+		return MpState(kvm_state.mp_state), e
+	}
 
-    return MpState(kvm_state.mp_state), nil
+	return MpState(kvm_state.mp_state), nil
 }
 
 func (vcpu *Vcpu) SetMpState(state MpState) error {
 
-    // Execute the ioctl.
-    var kvm_state C.struct_kvm_mp_state
-    kvm_state.mp_state = C.__u32(state)
-    _, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(vcpu.fd),
-        uintptr(C.IoctlSetMpState),
-        uintptr(unsafe.Pointer(&kvm_state)))
-    if e != 0 {
-        return e
-    }
+	// Execute the ioctl.
+	var kvm_state C.struct_kvm_mp_state
+	kvm_state.mp_state = C.__u32(state)
+	_, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(vcpu.fd),
+		uintptr(C.IoctlSetMpState),
+		uintptr(unsafe.Pointer(&kvm_state)))
+	if e != 0 {
+		return e
+	}
 
-    return nil
+	return nil
 }
 
 func (state *MpState) MarshalJSON() ([]byte, error) {
 
-    // Marshal as a string.
-    value, ok := stateMap[*state]
-    if !ok {
-        return nil, UnknownState
-    }
+	// Marshal as a string.
+	value, ok := stateMap[*state]
+	if !ok {
+		return nil, UnknownState
+	}
 
-    return json.Marshal(value)
+	return json.Marshal(value)
 }
 
 func (state *MpState) UnmarshalJSON(data []byte) error {
 
-    // Unmarshal as an string.
-    var value string
-    err := json.Unmarshal(data, &value)
-    if err != nil {
-        return err
-    }
+	// Unmarshal as an string.
+	var value string
+	err := json.Unmarshal(data, &value)
+	if err != nil {
+		return err
+	}
 
-    // Find the state.
-    newstate, ok := stateRevMap[value]
-    if !ok {
-        return UnknownState
-    }
+	// Find the state.
+	newstate, ok := stateRevMap[value]
+	if !ok {
+		return UnknownState
+	}
 
-    // That's our state.
-    *state = newstate
-    return nil
+	// That's our state.
+	*state = newstate
+	return nil
 }

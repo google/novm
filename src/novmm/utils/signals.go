@@ -15,12 +15,12 @@
 package utils
 
 import (
-    "syscall"
+	"syscall"
 )
 
 const (
-    SigVcpuInt        = syscall.SIGUSR1
-    SigShutdown       = syscall.SIGTERM
-    SigRestart        = syscall.SIGHUP
-    SigSpecialRestart = syscall.SIGUSR2
+	SigVcpuInt        = syscall.SIGUSR1
+	SigShutdown       = syscall.SIGTERM
+	SigRestart        = syscall.SIGHUP
+	SigSpecialRestart = syscall.SIGUSR2
 )

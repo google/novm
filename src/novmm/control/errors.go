@@ -15,7 +15,7 @@
 package control
 
 import (
-    "errors"
+	"errors"
 )
 
 var InvalidControlSocket = errors.New("Invalid control socket?")

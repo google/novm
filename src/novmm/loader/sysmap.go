@@ -15,16 +15,16 @@
 package loader
 
 import (
-    "novmm/platform"
+	"novmm/platform"
 )
 
 type SystemMap interface {
-    Lookup(addr platform.Vaddr) (string, uint64)
+	Lookup(addr platform.Vaddr) (string, uint64)
 }
 
 type Convention struct {
-    instruction platform.Register
-    arguments   []platform.Register
-    rvalue      platform.Register
-    stack       platform.Register
+	instruction platform.Register
+	arguments   []platform.Register
+	rvalue      platform.Register
+	stack       platform.Register
 }

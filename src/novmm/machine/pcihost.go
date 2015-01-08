@@ -30,36 +30,36 @@ package machine
 //
 
 const (
-    PciCapabilityPortRoot = 0x40
+	PciCapabilityPortRoot = 0x40
 )
 
 func NewPciHostBridge(info *DeviceInfo) (Device, error) {
 
-    // Create a bus device.
-    hostbridge, err := NewPciDevice(
-        info,
-        PciVendorId(0x1022), // AMD.
-        PciDeviceId(0x7432), // Made-up.
-        PciClassBridge,
-        PciRevision(0),
-        0,
-        0)
-    if err != nil {
-        return nil, err
-    }
+	// Create a bus device.
+	hostbridge, err := NewPciDevice(
+		info,
+		PciVendorId(0x1022), // AMD.
+		PciDeviceId(0x7432), // Made-up.
+		PciClassBridge,
+		PciRevision(0),
+		0,
+		0)
+	if err != nil {
+		return nil, err
+	}
 
-    // A bridge only has 2 bars.
-    hostbridge.PciBarCount = 2
+	// A bridge only has 2 bars.
+	hostbridge.PciBarCount = 2
 
-    // Set our type & command.
-    hostbridge.Config.Set8(0xe, 1)
-    hostbridge.Config.Set8(0x4, hostbridge.Config.Get8(0x4)|0x04)
+	// Set our type & command.
+	hostbridge.Config.Set8(0xe, 1)
+	hostbridge.Config.Set8(0x4, hostbridge.Config.Get8(0x4)|0x04)
 
-    // Add our PortRoot capability.
-    hostbridge.Capabilities[PciCapabilityPortRoot] = &PciCapability{
-        Size: 0,
-    }
+	// Add our PortRoot capability.
+	hostbridge.Capabilities[PciCapabilityPortRoot] = &PciCapability{
+		Size: 0,
+	}
 
-    // Done.
-    return hostbridge, nil
+	// Done.
+	return hostbridge, nil
 }

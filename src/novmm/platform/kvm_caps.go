@@ -39,16 +39,16 @@ const int CapXcrs = KVM_CAP_XCRS;
 import "C"
 
 import (
-    "syscall"
+	"syscall"
 )
 
 type kvmCapability struct {
-    name   string
-    number uintptr
+	name   string
+	number uintptr
 }
 
 func (capability *kvmCapability) Error() string {
-    return "Missing capability: " + capability.name
+	return "Missing capability: " + capability.name
 }
 
 //
@@ -61,45 +61,45 @@ func (capability *kvmCapability) Error() string {
 // so we can split this out when it's necessary later.
 //
 var requiredCapabilities = []kvmCapability{
-    kvmCapability{"User Memory", uintptr(C.CapUserMem)},
-    kvmCapability{"Identity Map", uintptr(C.CapSetIdentityMapAddr)},
-    kvmCapability{"IRQ Chip", uintptr(C.CapIrqChip)},
-    kvmCapability{"IO Event FD", uintptr(C.CapIoFd)},
-    kvmCapability{"IRQ Event FD", uintptr(C.CapIrqFd)},
-    kvmCapability{"PIT2", uintptr(C.CapPit2)},
-    kvmCapability{"PITSTATE2", uintptr(C.CapPitState2)},
-    kvmCapability{"Clock", uintptr(C.CapAdjustClock)},
-    kvmCapability{"CPUID", uintptr(C.CapCpuid)},
-    kvmCapability{"MSI", uintptr(C.CapSignalMsi)},
-    kvmCapability{"VCPU Events", uintptr(C.CapVcpuEvents)},
-    kvmCapability{"XSAVE", uintptr(C.CapXSave)},
-    kvmCapability{"XCRS", uintptr(C.CapXcrs)},
+	kvmCapability{"User Memory", uintptr(C.CapUserMem)},
+	kvmCapability{"Identity Map", uintptr(C.CapSetIdentityMapAddr)},
+	kvmCapability{"IRQ Chip", uintptr(C.CapIrqChip)},
+	kvmCapability{"IO Event FD", uintptr(C.CapIoFd)},
+	kvmCapability{"IRQ Event FD", uintptr(C.CapIrqFd)},
+	kvmCapability{"PIT2", uintptr(C.CapPit2)},
+	kvmCapability{"PITSTATE2", uintptr(C.CapPitState2)},
+	kvmCapability{"Clock", uintptr(C.CapAdjustClock)},
+	kvmCapability{"CPUID", uintptr(C.CapCpuid)},
+	kvmCapability{"MSI", uintptr(C.CapSignalMsi)},
+	kvmCapability{"VCPU Events", uintptr(C.CapVcpuEvents)},
+	kvmCapability{"XSAVE", uintptr(C.CapXSave)},
+	kvmCapability{"XCRS", uintptr(C.CapXcrs)},
 }
 
 func checkCapability(
-    fd int,
-    capability kvmCapability) error {
+	fd int,
+	capability kvmCapability) error {
 
-    r, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(fd),
-        uintptr(C.IoctlCheckExtension),
-        capability.number)
-    if r != 1 || e != 0 {
-        return &capability
-    }
+	r, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(C.IoctlCheckExtension),
+		capability.number)
+	if r != 1 || e != 0 {
+		return &capability
+	}
 
-    return nil
+	return nil
 }
 
 func checkCapabilities(fd int) error {
-    // Check our extensions.
-    for _, capSpec := range requiredCapabilities {
-        err := checkCapability(fd, capSpec)
-        if err != nil {
-            return err
-        }
-    }
+	// Check our extensions.
+	for _, capSpec := range requiredCapabilities {
+		err := checkCapability(fd, capSpec)
+		if err != nil {
+			return err
+		}
+	}
 
-    return nil
+	return nil
 }

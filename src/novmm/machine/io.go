@@ -15,7 +15,7 @@
 package machine
 
 import (
-    "novmm/platform"
+	"novmm/platform"
 )
 
 //
@@ -29,17 +29,17 @@ import (
 // This is a decision that could be revisited.
 
 type IoEvent interface {
-    Size() uint
+	Size() uint
 
-    GetData() uint64
-    SetData(val uint64)
+	GetData() uint64
+	SetData(val uint64)
 
-    IsWrite() bool
+	IsWrite() bool
 }
 
 type IoOperations interface {
-    Read(offset uint64, size uint) (uint64, error)
-    Write(offset uint64, size uint, value uint64) error
+	Read(offset uint64, size uint) (uint64, error)
+	Write(offset uint64, size uint, value uint64) error
 }
 
 //
@@ -56,21 +56,21 @@ type IoOperations interface {
 // rest of the system.
 
 type IoRequest struct {
-    event  IoEvent
-    offset uint64
-    result chan error
+	event  IoEvent
+	offset uint64
+	result chan error
 }
 
 type IoQueue chan IoRequest
 
 func (queue IoQueue) Submit(event IoEvent, offset uint64) error {
 
-    // Send the request to the device.
-    req := IoRequest{event, offset, make(chan error)}
-    queue <- req
+	// Send the request to the device.
+	req := IoRequest{event, offset, make(chan error)}
+	queue <- req
 
-    // Pull the result when it's done.
-    return <-req.result
+	// Pull the result when it's done.
+	return <-req.result
 }
 
 //
@@ -82,97 +82,97 @@ func (queue IoQueue) Submit(event IoEvent, offset uint64) error {
 // represent a single port for a single device.
 
 type IoHandler struct {
-    Device
+	Device
 
-    start      platform.Paddr
-    operations IoOperations
-    queue      IoQueue
+	start      platform.Paddr
+	operations IoOperations
+	queue      IoQueue
 }
 
 func NewIoHandler(
-    device Device,
-    start platform.Paddr,
-    operations IoOperations) *IoHandler {
+	device Device,
+	start platform.Paddr,
+	operations IoOperations) *IoHandler {
 
-    io := &IoHandler{
-        Device:     device,
-        start:      start,
-        operations: operations,
-        queue:      make(IoQueue),
-    }
+	io := &IoHandler{
+		Device:     device,
+		start:      start,
+		operations: operations,
+		queue:      make(IoQueue),
+	}
 
-    // Start the handler.
-    go io.Run()
+	// Start the handler.
+	go io.Run()
 
-    return io
+	return io
 }
 
 func normalize(val uint64, size uint) uint64 {
-    switch size {
-    case 1:
-        return val & 0xff
-    case 2:
-        return val & 0xffff
-    case 4:
-        return val & 0xffffffff
-    }
-    return val
+	switch size {
+	case 1:
+		return val & 0xff
+	case 2:
+		return val & 0xffff
+	case 4:
+		return val & 0xffffffff
+	}
+	return val
 }
 
 func (io *IoHandler) Run() {
 
-    for {
-        // Pull first request.
-        req := <-io.queue
-        size := req.event.Size()
+	for {
+		// Pull first request.
+		req := <-io.queue
+		size := req.event.Size()
 
-        // Note that we are running.
-        // NOTE: This is a bit awkward. Theoretically,
-        // we could actually be processing an exit from
-        // a vcpu that is in the middle of an operation.
-        // However, I chose to handle this case in kvm_run,
-        // as we don't consider a VCPU to be paused until
-        // it's event is completely processed. From the
-        // device perspective -- nothing related to this
-        // event has yet touched the device, so it's okay
-        // to acquire it at this point and continue. If
-        // this device is paused, then the VCPU will be
-        // unpausable (therefore the normal practice will
-        // be to pause all VCPUs, then pause all devices).
-        io.Device.Acquire()
+		// Note that we are running.
+		// NOTE: This is a bit awkward. Theoretically,
+		// we could actually be processing an exit from
+		// a vcpu that is in the middle of an operation.
+		// However, I chose to handle this case in kvm_run,
+		// as we don't consider a VCPU to be paused until
+		// it's event is completely processed. From the
+		// device perspective -- nothing related to this
+		// event has yet touched the device, so it's okay
+		// to acquire it at this point and continue. If
+		// this device is paused, then the VCPU will be
+		// unpausable (therefore the normal practice will
+		// be to pause all VCPUs, then pause all devices).
+		io.Device.Acquire()
 
-        // Perform the operation.
-        if req.event.IsWrite() {
-            val := normalize(req.event.GetData(), size)
+		// Perform the operation.
+		if req.event.IsWrite() {
+			val := normalize(req.event.GetData(), size)
 
-            // Debug?
-            io.Debug(
-                "write %x @ %x [size: %d]",
-                val,
-                io.start.After(req.offset),
-                size)
+			// Debug?
+			io.Debug(
+				"write %x @ %x [size: %d]",
+				val,
+				io.start.After(req.offset),
+				size)
 
-            err := io.operations.Write(req.offset, size, val)
-            req.result <- err
+			err := io.operations.Write(req.offset, size, val)
+			req.result <- err
 
-        } else {
-            val, err := io.operations.Read(req.offset, size)
-            val = normalize(val, size)
-            if err == nil {
-                req.event.SetData(val)
-            }
+		} else {
+			val, err := io.operations.Read(req.offset, size)
+			val = normalize(val, size)
+			if err == nil {
+				req.event.SetData(val)
+			}
 
-            req.result <- err
+			req.result <- err
 
-            // Debug?
-            io.Debug(
-                "read %x @ %x [size: %d]",
-                val,
-                io.start.After(req.offset),
-                size)
-        }
+			// Debug?
+			io.Debug(
+				"read %x @ %x [size: %d]",
+				val,
+				io.start.After(req.offset),
+				size)
+		}
 
-        // We've finished, we could now pause.
-        io.Device.Release()
-    }
+		// We've finished, we could now pause.
+		io.Device.Release()
+	}
 }

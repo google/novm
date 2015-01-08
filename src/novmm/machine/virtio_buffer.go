@@ -20,8 +20,8 @@ package machine
 import "C"
 
 import (
-    "syscall"
-    "unsafe"
+	"syscall"
+	"unsafe"
 )
 
 //
@@ -32,188 +32,188 @@ import (
 //
 
 type VirtioBuffer struct {
-    data     [][]byte
-    index    uint16
-    length   int
-    readonly bool
+	data     [][]byte
+	index    uint16
+	length   int
+	readonly bool
 }
 
 func NewVirtioBuffer(index uint16, readonly bool) *VirtioBuffer {
-    buf := new(VirtioBuffer)
-    buf.data = make([][]byte, 0, 1)
-    buf.index = index
-    buf.readonly = readonly
-    buf.length = 0
-    return buf
+	buf := new(VirtioBuffer)
+	buf.data = make([][]byte, 0, 1)
+	buf.index = index
+	buf.readonly = readonly
+	buf.length = 0
+	return buf
 }
 
 func (buf *VirtioBuffer) Append(data []byte) {
-    buf.data = append(buf.data, data)
-    buf.length += len(data)
+	buf.data = append(buf.data, data)
+	buf.length += len(data)
 }
 
 func (buf *VirtioBuffer) Length() int {
-    return buf.length
+	return buf.length
 }
 
 func (buf *VirtioBuffer) SetLength(length int) {
-    buf.length = length
+	buf.length = length
 }
 
 func (buf *VirtioBuffer) Gather(
-    offset int,
-    length int) ([]unsafe.Pointer, []C.int) {
+	offset int,
+	length int) ([]unsafe.Pointer, []C.int) {
 
-    ptrs := make([]unsafe.Pointer, 0, len(buf.data))
-    lens := make([]C.int, 0, len(buf.data))
+	ptrs := make([]unsafe.Pointer, 0, len(buf.data))
+	lens := make([]C.int, 0, len(buf.data))
 
-    for _, data := range buf.data {
-        if offset >= len(data) {
-            offset -= len(data)
-        } else if offset > 0 {
-            ptrs = append(ptrs, unsafe.Pointer(&data[offset]))
-            if len(data)-offset >= length {
-                lens = append(lens, C.int(length))
-                length = 0
-            } else {
-                lens = append(lens, C.int(len(data)-offset))
-                length -= len(data) - offset
-            }
-            offset = 0
-        } else {
-            ptrs = append(ptrs, unsafe.Pointer(&data[0]))
-            if len(data) >= length {
-                lens = append(lens, C.int(length))
-                length = 0
-            } else {
-                lens = append(lens, C.int(len(data)))
-                length -= len(data)
-            }
-        }
+	for _, data := range buf.data {
+		if offset >= len(data) {
+			offset -= len(data)
+		} else if offset > 0 {
+			ptrs = append(ptrs, unsafe.Pointer(&data[offset]))
+			if len(data)-offset >= length {
+				lens = append(lens, C.int(length))
+				length = 0
+			} else {
+				lens = append(lens, C.int(len(data)-offset))
+				length -= len(data) - offset
+			}
+			offset = 0
+		} else {
+			ptrs = append(ptrs, unsafe.Pointer(&data[0]))
+			if len(data) >= length {
+				lens = append(lens, C.int(length))
+				length = 0
+			} else {
+				lens = append(lens, C.int(len(data)))
+				length -= len(data)
+			}
+		}
 
-        if length == 0 {
-            break
-        }
-    }
+		if length == 0 {
+			break
+		}
+	}
 
-    return ptrs, lens
+	return ptrs, lens
 }
 
 func (buf *VirtioBuffer) doIO(
-    fd int,
-    fd_offset int64,
-    buf_offset int,
-    length int,
-    write C.int) (int, error) {
+	fd int,
+	fd_offset int64,
+	buf_offset int,
+	length int,
+	write C.int) (int, error) {
 
-    // Gather the appropriate elements.
-    ptrs, lens := buf.Gather(buf_offset, length)
+	// Gather the appropriate elements.
+	ptrs, lens := buf.Gather(buf_offset, length)
 
-    // Actually execute our readv/writev.
-    rval := C.do_iovec(
-        C.int(fd),
-        C.int(len(ptrs)),
-        &ptrs[0],
-        &lens[0],
-        C.off_t(fd_offset),
-        write)
-    if rval < 0 {
-        return 0, syscall.Errno(int(-rval))
-    }
+	// Actually execute our readv/writev.
+	rval := C.do_iovec(
+		C.int(fd),
+		C.int(len(ptrs)),
+		&ptrs[0],
+		&lens[0],
+		C.off_t(fd_offset),
+		write)
+	if rval < 0 {
+		return 0, syscall.Errno(int(-rval))
+	}
 
-    return int(rval), nil
+	return int(rval), nil
 }
 
 func (buf *VirtioBuffer) Write(
-    fd int,
-    buf_offset int,
-    length int) (int, error) {
+	fd int,
+	buf_offset int,
+	length int) (int, error) {
 
-    return buf.doIO(fd, -1, buf_offset, length, C.int(1))
+	return buf.doIO(fd, -1, buf_offset, length, C.int(1))
 }
 
 func (buf *VirtioBuffer) PWrite(
-    fd int,
-    fd_offset int64,
-    buf_offset int,
-    length int) (int, error) {
+	fd int,
+	fd_offset int64,
+	buf_offset int,
+	length int) (int, error) {
 
-    return buf.doIO(fd, fd_offset, buf_offset, length, C.int(1))
+	return buf.doIO(fd, fd_offset, buf_offset, length, C.int(1))
 }
 
 func (buf *VirtioBuffer) Read(
-    fd int,
-    buf_offset int,
-    length int) (int, error) {
+	fd int,
+	buf_offset int,
+	length int) (int, error) {
 
-    return buf.doIO(fd, -1, buf_offset, length, C.int(0))
+	return buf.doIO(fd, -1, buf_offset, length, C.int(0))
 }
 
 func (buf *VirtioBuffer) PRead(
-    fd int,
-    fd_offset int64,
-    buf_offset int,
-    length int) (int, error) {
+	fd int,
+	fd_offset int64,
+	buf_offset int,
+	length int) (int, error) {
 
-    return buf.doIO(fd, fd_offset, buf_offset, length, C.int(0))
+	return buf.doIO(fd, fd_offset, buf_offset, length, C.int(0))
 }
 
 func (buf *VirtioBuffer) Map(
-    offset int,
-    length int) []byte {
+	offset int,
+	length int) []byte {
 
-    // Empty read?
-    if length == 0 {
-        return []byte{}
-    }
+	// Empty read?
+	if length == 0 {
+		return []byte{}
+	}
 
-    for _, data := range buf.data {
-        if offset >= len(data) {
-            offset -= len(data)
-        } else if offset > 0 {
-            if length > len(data)-offset {
-                return data[offset:len(data)]
-            } else {
-                return data[offset : offset+length]
-            }
-        } else {
-            if length > len(data) {
-                return data
-            } else {
-                return data[:length]
-            }
-        }
-    }
+	for _, data := range buf.data {
+		if offset >= len(data) {
+			offset -= len(data)
+		} else if offset > 0 {
+			if length > len(data)-offset {
+				return data[offset:len(data)]
+			} else {
+				return data[offset : offset+length]
+			}
+		} else {
+			if length > len(data) {
+				return data
+			} else {
+				return data[:length]
+			}
+		}
+	}
 
-    // We never found the offset,
-    // give back nothing to indicate.
-    return nil
+	// We never found the offset,
+	// give back nothing to indicate.
+	return nil
 }
 
 func (buf *VirtioBuffer) CopyOut(
-    offset int,
-    output []byte) int {
+	offset int,
+	output []byte) int {
 
-    copied := 0
+	copied := 0
 
-    for _, data := range buf.data {
-        if offset >= len(data) {
-            offset -= len(data)
-            continue
-        } else if offset > 0 {
-            data = data[offset:]
-        }
+	for _, data := range buf.data {
+		if offset >= len(data) {
+			offset -= len(data)
+			continue
+		} else if offset > 0 {
+			data = data[offset:]
+		}
 
-        if len(data) > len(output) {
-            copy(output, data[:len(output)])
-            copied += len(output)
-            break
-        } else {
-            copy(output, data)
-            copied += len(data)
-            output = output[len(data):]
-        }
-    }
+		if len(data) > len(output) {
+			copy(output, data[:len(output)])
+			copied += len(output)
+			break
+		} else {
+			copy(output, data)
+			copied += len(data)
+			output = output[len(data):]
+		}
+	}
 
-    return copied
+	return copied
 }

@@ -15,7 +15,7 @@
 package machine
 
 import (
-    "io"
+	"io"
 )
 
 //
@@ -29,5 +29,5 @@ import (
 //
 
 type Proxy interface {
-    io.ReadWriteCloser
+	io.ReadWriteCloser
 }

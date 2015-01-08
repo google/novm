@@ -15,7 +15,7 @@
 package main
 
 import (
-    "errors"
+	"errors"
 )
 
 var ExitWithoutReason = errors.New("Exit without reason?")

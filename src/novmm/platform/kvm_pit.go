@@ -29,8 +29,8 @@ const int PitSize = sizeof(struct kvm_pit_state2);
 import "C"
 
 import (
-    "syscall"
-    "unsafe"
+	"syscall"
+	"unsafe"
 )
 
 //
@@ -43,70 +43,70 @@ import (
 // bits and ensuring compatibility, etc.
 //
 type PitState struct {
-    Data []byte `json:"data"`
+	Data []byte `json:"data"`
 }
 
 func (vm *Vm) CreatePit() error {
-    // Prepare the PIT config.
-    // The only flag supported at the time of writing
-    // was KVM_PIT_SPEAKER_DUMMY, which I really have no
-    // interest in supporting.
-    var pit C.struct_kvm_pit_config
-    pit.flags = C.__u32(0)
+	// Prepare the PIT config.
+	// The only flag supported at the time of writing
+	// was KVM_PIT_SPEAKER_DUMMY, which I really have no
+	// interest in supporting.
+	var pit C.struct_kvm_pit_config
+	pit.flags = C.__u32(0)
 
-    // Execute the ioctl.
-    _, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(vm.fd),
-        uintptr(C.IoctlCreatePit2),
-        uintptr(unsafe.Pointer(&pit)))
-    if e != 0 {
-        return e
-    }
+	// Execute the ioctl.
+	_, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(vm.fd),
+		uintptr(C.IoctlCreatePit2),
+		uintptr(unsafe.Pointer(&pit)))
+	if e != 0 {
+		return e
+	}
 
-    return nil
+	return nil
 }
 
 func (vm *Vm) GetPit() (PitState, error) {
 
-    // Prepare the pit state.
-    state := PitState{make([]byte, C.PitSize, C.PitSize)}
+	// Prepare the pit state.
+	state := PitState{make([]byte, C.PitSize, C.PitSize)}
 
-    // Execute the ioctl.
-    _, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(vm.fd),
-        uintptr(C.IoctlGetPit2),
-        uintptr(unsafe.Pointer(&state.Data[0])))
-    if e != 0 {
-        return state, e
-    }
+	// Execute the ioctl.
+	_, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(vm.fd),
+		uintptr(C.IoctlGetPit2),
+		uintptr(unsafe.Pointer(&state.Data[0])))
+	if e != 0 {
+		return state, e
+	}
 
-    return state, nil
+	return state, nil
 }
 
 func (vm *Vm) SetPit(state PitState) error {
 
-    // Is there any state to set?
-    // We just eat this error, it's fine.
-    if state.Data == nil {
-        return nil
-    }
+	// Is there any state to set?
+	// We just eat this error, it's fine.
+	if state.Data == nil {
+		return nil
+	}
 
-    // Is this the right size?
-    if len(state.Data) != int(C.PitSize) {
-        return PitIncompatible
-    }
+	// Is this the right size?
+	if len(state.Data) != int(C.PitSize) {
+		return PitIncompatible
+	}
 
-    // Execute the ioctl.
-    _, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(vm.fd),
-        uintptr(C.IoctlSetPit2),
-        uintptr(unsafe.Pointer(&state.Data[0])))
-    if e != 0 {
-        return e
-    }
+	// Execute the ioctl.
+	_, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(vm.fd),
+		uintptr(C.IoctlSetPit2),
+		uintptr(unsafe.Pointer(&state.Data[0])))
+	if e != 0 {
+		return e
+	}
 
-    return nil
+	return nil
 }

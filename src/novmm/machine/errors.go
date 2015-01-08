@@ -15,8 +15,8 @@
 package machine
 
 import (
-    "errors"
-    "fmt"
+	"errors"
+	"fmt"
 )
 
 // Basic errors.
@@ -45,7 +45,7 @@ var UartUnknown = errors.New("Unknown COM port.")
 
 // Driver errors.
 func DriverUnknown(name string) error {
-    return errors.New(fmt.Sprintf("Unknown driver: %s", name))
+	return errors.New(fmt.Sprintf("Unknown driver: %s", name))
 }
 
 // Virtio errors.

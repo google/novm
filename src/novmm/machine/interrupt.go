@@ -15,7 +15,7 @@
 package machine
 
 import (
-    "novmm/platform"
+	"novmm/platform"
 )
 
 //

@@ -15,7 +15,7 @@
 package protocol
 
 import (
-    "errors"
+	"errors"
 )
 
 var UnknownStatus = errors.New("Unknown status?")

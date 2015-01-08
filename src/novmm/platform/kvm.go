@@ -26,187 +26,187 @@ const int IoctlGetVcpuMmapSize = KVM_GET_VCPU_MMAP_SIZE;
 import "C"
 
 import (
-    "syscall"
+	"syscall"
 )
 
 type Vm struct {
-    // The VM fd.
-    fd  int
+	// The VM fd.
+	fd int
 
-    // The next vcpu id to create.
-    next_id int32
+	// The next vcpu id to create.
+	next_id int32
 
-    // The next memory region slot to create.
-    // This is not serialized because we will
-    // recreate all regions (and the ordering
-    // may even be different the 2nd time round).
-    mem_region int
+	// The next memory region slot to create.
+	// This is not serialized because we will
+	// recreate all regions (and the ordering
+	// may even be different the 2nd time round).
+	mem_region int
 
-    // Our cpuid data.
-    // At the moment, we just expose the full
-    // host flags to the guest.
-    cpuid []Cpuid
+	// Our cpuid data.
+	// At the moment, we just expose the full
+	// host flags to the guest.
+	cpuid []Cpuid
 
-    // Our MSRs.
-    msrs []uint32
+	// Our MSRs.
+	msrs []uint32
 
-    // The size of the vcpu mmap structs.
-    mmap_size int
+	// The size of the vcpu mmap structs.
+	mmap_size int
 
-    // Our vcpus.
-    vcpus []*Vcpu
+	// Our vcpus.
+	vcpus []*Vcpu
 }
 
 func getMmapSize(fd int) (int, error) {
-    // Get the size of the Mmap structure.
-    r, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(fd),
-        uintptr(C.IoctlGetVcpuMmapSize),
-        0)
-    if e != 0 {
-        return 0, e
-    }
-    return int(r), nil
+	// Get the size of the Mmap structure.
+	r, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(C.IoctlGetVcpuMmapSize),
+		0)
+	if e != 0 {
+		return 0, e
+	}
+	return int(r), nil
 }
 
 func NewVm() (*Vm, error) {
-    fd, err := syscall.Open("/dev/kvm", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
-    if err != nil {
-        return nil, err
-    }
-    defer syscall.Close(fd)
+	fd, err := syscall.Open("/dev/kvm", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer syscall.Close(fd)
 
-    // Check API version.
-    version, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(fd),
-        uintptr(C.IoctlGetApiVersion),
-        0)
-    if version != 12 || e != 0 {
-        return nil, e
-    }
+	// Check API version.
+	version, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(C.IoctlGetApiVersion),
+		0)
+	if version != 12 || e != 0 {
+		return nil, e
+	}
 
-    // Check our extensions.
-    for _, capSpec := range requiredCapabilities {
-        err = checkCapability(fd, capSpec)
-        if err != nil {
-            return nil, err
-        }
-    }
+	// Check our extensions.
+	for _, capSpec := range requiredCapabilities {
+		err = checkCapability(fd, capSpec)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-    // Make sure we have the mmap size.
-    mmap_size, err := getMmapSize(fd)
-    if err != nil {
-        return nil, err
-    }
+	// Make sure we have the mmap size.
+	mmap_size, err := getMmapSize(fd)
+	if err != nil {
+		return nil, err
+	}
 
-    // Make sure we have cpuid data.
-    cpuid, err := defaultCpuid(fd)
-    if err != nil {
-        return nil, err
-    }
+	// Make sure we have cpuid data.
+	cpuid, err := defaultCpuid(fd)
+	if err != nil {
+		return nil, err
+	}
 
-    // Get our list of available MSRs.
-    msrs, err := availableMsrs(fd)
-    if err != nil {
-        return nil, err
-    }
+	// Get our list of available MSRs.
+	msrs, err := availableMsrs(fd)
+	if err != nil {
+		return nil, err
+	}
 
-    // Create new VM.
-    vmfd, _, e := syscall.Syscall(
-        syscall.SYS_IOCTL,
-        uintptr(fd),
-        uintptr(C.IoctlCreateVm),
-        0)
-    if e != 0 {
-        return nil, e
-    }
+	// Create new VM.
+	vmfd, _, e := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(C.IoctlCreateVm),
+		0)
+	if e != 0 {
+		return nil, e
+	}
 
-    // Make sure this VM gets closed.
-    // (Same thing is done for Vcpus).
-    syscall.CloseOnExec(int(vmfd))
+	// Make sure this VM gets closed.
+	// (Same thing is done for Vcpus).
+	syscall.CloseOnExec(int(vmfd))
 
-    // Prepare our VM object.
-    vm := &Vm{
-        fd:        int(vmfd),
-        vcpus:     make([]*Vcpu, 0, 0),
-        cpuid:     cpuid,
-        msrs:      msrs,
-        mmap_size: mmap_size,
-    }
+	// Prepare our VM object.
+	vm := &Vm{
+		fd:        int(vmfd),
+		vcpus:     make([]*Vcpu, 0, 0),
+		cpuid:     cpuid,
+		msrs:      msrs,
+		mmap_size: mmap_size,
+	}
 
-    return vm, nil
+	return vm, nil
 }
 
 func (vm *Vm) Dispose() error {
 
-    for _, vcpu := range vm.vcpus {
-        vcpu.Dispose()
-    }
+	for _, vcpu := range vm.vcpus {
+		vcpu.Dispose()
+	}
 
-    return syscall.Close(vm.fd)
+	return syscall.Close(vm.fd)
 }
 
 func (vm *Vm) Vcpus() []*Vcpu {
-    return vm.vcpus
+	return vm.vcpus
 }
 
 func (vm *Vm) VcpuInfo() ([]VcpuInfo, error) {
 
-    err := vm.Pause(false)
-    if err != nil {
-        return nil, err
-    }
-    defer vm.Unpause(false)
+	err := vm.Pause(false)
+	if err != nil {
+		return nil, err
+	}
+	defer vm.Unpause(false)
 
-    vcpus := make([]VcpuInfo, 0, len(vm.vcpus))
-    for _, vcpu := range vm.vcpus {
-        vcpuinfo, err := NewVcpuInfo(vcpu)
-        if err != nil {
-            return nil, err
-        }
+	vcpus := make([]VcpuInfo, 0, len(vm.vcpus))
+	for _, vcpu := range vm.vcpus {
+		vcpuinfo, err := NewVcpuInfo(vcpu)
+		if err != nil {
+			return nil, err
+		}
 
-        vcpus = append(vcpus, vcpuinfo)
-    }
+		vcpus = append(vcpus, vcpuinfo)
+	}
 
-    return vcpus, nil
+	return vcpus, nil
 }
 
 func (vm *Vm) Pause(manual bool) error {
 
-    // Pause all vcpus.
-    for i, vcpu := range vm.vcpus {
-        err := vcpu.Pause(manual)
-        if err != nil && err != AlreadyPaused {
-            // Rollback.
-            // NOTE: Start with the previous.
-            for i -= 1; i >= 0; i -= 1 {
-                vm.vcpus[i].Unpause(manual)
-            }
-            return err
-        }
-    }
+	// Pause all vcpus.
+	for i, vcpu := range vm.vcpus {
+		err := vcpu.Pause(manual)
+		if err != nil && err != AlreadyPaused {
+			// Rollback.
+			// NOTE: Start with the previous.
+			for i -= 1; i >= 0; i -= 1 {
+				vm.vcpus[i].Unpause(manual)
+			}
+			return err
+		}
+	}
 
-    // Done.
-    return nil
+	// Done.
+	return nil
 }
 
 func (vm *Vm) Unpause(manual bool) error {
 
-    // Unpause all vcpus.
-    for i, vcpu := range vm.vcpus {
-        err := vcpu.Unpause(manual)
-        if err != nil && err != NotPaused {
-            // Rollback.
-            // NOTE: Start with the previous.
-            for i -= 1; i >= 0; i -= 1 {
-                vm.vcpus[i].Pause(manual)
-            }
-            return err
-        }
-    }
+	// Unpause all vcpus.
+	for i, vcpu := range vm.vcpus {
+		err := vcpu.Unpause(manual)
+		if err != nil && err != NotPaused {
+			// Rollback.
+			// NOTE: Start with the previous.
+			for i -= 1; i >= 0; i -= 1 {
+				vm.vcpus[i].Pause(manual)
+			}
+			return err
+		}
+	}
 
-    // Done.
-    return nil
+	// Done.
+	return nil
 }
