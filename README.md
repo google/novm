@@ -113,6 +113,23 @@ Requirements
 
 *novm* requires at least go 1.1 in order to build.
 
+Building
+---------
+
+To build *novm*, simply clone the repo and run `make`.
+
+Optionally, you can build packages by running `make deb` or `make rpm`.
+
+To run *novm*, use `scripts/novm`, or if you've installed packages, just type `novm`.
+
+For information on using the command line, just type `novm`. You may use
+`novm <command> --help` for detailed information on any specific command.
+
+The first thing you'll need is a kernel. You can create a kernel bundle using
+the running kernel by running `novm-import-kernel`.
+
+To create a novm instance, try using `novm create --com1 /bin/ls`.
+
 Technical Details
 -----------------
 
