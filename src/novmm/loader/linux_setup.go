@@ -19,12 +19,7 @@ package loader
 #include <asm/types.h>
 #include <linux/const.h>
 #include <string.h>
-
-#ifdef __x86_64__
-#include <x86_64-linux-gnu/asm/bootparam.h>
-#else
-#include <i386-linux-gnu/asm/bootparam.h>
-#endif
+#include <asm/bootparam.h>
 
 // E820 codes.
 const int E820Ram = E820_RAM;
