@@ -23,9 +23,9 @@ Requires: dnsmasq, bridge-utils, fakeroot
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT
 rsync -rav --delete ../../dist/* $RPM_BUILD_ROOT
+(cd ../../dist && find . -type f | sed -e 's|^\./|/|') > filelist
 
-%files
-/usr/
+%files -f filelist
 
 %changelog
 * Sat Dec 07 2013 Adin Scannell <adin@scannell.ca>
