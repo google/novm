@@ -6,7 +6,7 @@ include pkg-info
 DESCRIPTION := $(shell git describe --tags --match 'v*' | cut -d'v' -f2-)
 VERSION ?= $(shell echo $(DESCRIPTION) | cut -d'-' -f1)
 RELEASE ?= $(shell echo $(DESCRIPTION) | cut -d'-' -f2- -s | tr '-' '.')
-ARCH ?= $(shell arch)
+ARCH ?= $(shell go env GOARCH)
 
 ifeq ($(VERSION),)
 $(error No VERSION available, please set manually.)
@@ -15,12 +15,12 @@ ifeq ($(RELEASE),)
 RELEASE := 1
 endif
 
-ifeq ($(ARCH),x86_64)
+ifeq ($(ARCH),amd64)
 DEB_ARCH := amd64
 RPM_ARCH := x86_64
 KERNEL_ARCH := x86
 else
-    ifeq ($(ARCH),i686)
+    ifeq ($(ARCH),386)
 DEB_ARCH := i386
 RPM_ARCH := i386
 KERNEL_ARCH := x86
