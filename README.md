@@ -113,6 +113,10 @@ Requirements
 
 *novm* requires at least go 1.1 in order to build.
 
+*novm* also requires at least Linux 3.8, with appropriate headers. If your
+headers are not recent enough, you may see compilation errors related to
+`KVM_SIGNAL_MSI` or `KVM_CAP_SIGNAL_MSI`.
+
 Building
 ---------
 
