@@ -19,6 +19,7 @@ import (
 	"novmm/loader"
 	"novmm/machine"
 	"novmm/platform"
+	"runtime"
 )
 
 func Loop(
@@ -26,6 +27,12 @@ func Loop(
 	vcpu *platform.Vcpu,
 	model *machine.Model,
 	tracer *loader.Tracer) error {
+
+	// It's not really kosher to switch threads constantly when running a
+	// KVM VCPU. So we simply lock this goroutine to a single system
+	// thread. That way we know it won't be bouncing around.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	log.Printf("Vcpu[%d] running.", vcpu.Id)
 
