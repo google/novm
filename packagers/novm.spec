@@ -23,9 +23,12 @@ Requires: dnsmasq, bridge-utils, fakeroot
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT
 rsync -rav --delete ../../dist/* $RPM_BUILD_ROOT
-(cd ../../dist && find . -type f | sed -e 's|^\./|/|') > filelist
 
-%files -f filelist
+%files
+/usr/bin/novm
+/usr/bin/novm-import-kernel
+/usr/bin/novm-clear-kernels
+/usr/lib/novm
 
 %changelog
 * Sat Dec 07 2013 Adin Scannell <adin@scannell.ca>
