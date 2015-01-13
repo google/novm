@@ -110,7 +110,7 @@ type PciCapability struct {
 type PciCapabilityMap map[byte]*PciCapability
 
 type PciDevice struct {
-	MmioDevice
+	PioDevice
 
 	// Packed configuration data.
 	// (This encodes the vendor/device, etc.)
@@ -142,7 +142,7 @@ type PciDevice struct {
 type PciBus struct {
 	PioDevice
 
-	// Our Mmio Handlers.
+	// Our handlers.
 	IoHandlers `json:"-"`
 
 	// On bus devices.
@@ -352,7 +352,7 @@ func (pcibus *PciBus) AddDevice(device *PciDevice) error {
 	return pcibus.flush()
 }
 
-func (pcibus *PciBus) MmioHandlers() IoHandlers {
+func (pcibus *PciBus) PioHandlers() IoHandlers {
 	return pcibus.IoHandlers
 }
 
@@ -418,8 +418,12 @@ func (pcidevice *PciDevice) RebuildBars() {
 			continue
 		}
 
-		// Mask out port-I/O bits.
-		newreg := baraddr & ^(barsize-1) | 0xe
+		// Force all bars to exist in the PIO space, *not*
+		// the MMIO space. We do so because it's way faster
+		// to virtualize PIO operations over MMIO operations.
+		// The backing device shouldn't care, as we're able
+		// to handle (almost) arbitrarily sized regions.
+		newreg := baraddr & ^(barsize - 1)
 
 		if newreg != baraddr {
 			pcidevice.Debug(
@@ -435,7 +439,7 @@ func (pcidevice *PciDevice) RebuildBars() {
 
 		// Create a new handler.
 		region := MemoryRegion{
-			platform.Paddr(baraddr & ^uint32(0xf)),
+			platform.Paddr(baraddr & ^uint32(0x3)),
 			uint64(barsize)}
 		pcidevice.IoHandlers[region] = NewIoHandler(
 			pcidevice,
