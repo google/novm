@@ -92,6 +92,7 @@ deb: dist
 	@rm -rf debbuild && mkdir -p debbuild
 	@rsync -ruav packagers/DEBIAN debbuild
 	@rsync -ruav dist/ debbuild
+	@chmod 755 debbuild/DEBIAN
 	@sed -i "s/VERSION/$(VERSION)-$(RELEASE)/" debbuild/DEBIAN/control
 	@sed -i "s/MAINTAINER/$(MAINTAINER)/" debbuild/DEBIAN/control
 	@sed -i "s/ARCHITECTURE/$(DEB_ARCH)/" debbuild/DEBIAN/control
