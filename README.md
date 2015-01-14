@@ -191,7 +191,7 @@ by the ELF program headers. For example:
 
 We also note the entry point for the binary (here it happens to be 0x1000000).
 
-Before we able to jump to the entry point, we need to setup some basic
+Before we are able to jump to the entry point, we need to setup some basic
 requirements that would normally be done by the real-mode setup code:
 
 * Need a simple GDT and BOOT_CS and BOOT_DS.
