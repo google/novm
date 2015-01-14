@@ -55,7 +55,7 @@ class NovmShell(object):
             Available options are:
 
             mac=00:11:22:33:44:55 Set the MAC address.
-            tap=tap1              Set the tap name.
+            tapname=tap1          Set the tap name.
             bridge=br0            Enslave to a bridge.
             ip=192.168.1.2/24     Set the IP address.
             gateway=192.168.1.1   Set the gateway IP.

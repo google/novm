@@ -17,6 +17,7 @@ Device specification.
 import uuid
 
 from . import state
+from . import utils
 
 class Device(state.State):
 
@@ -71,5 +72,5 @@ class Driver(object):
             driver=driver or self.driver,
             name=name or self.name,
             data=data or {},
-            debug=debug or self.debug,
+            debug=utils.asbool(debug) or self.debug,
             cmdline=cmdline or None)
