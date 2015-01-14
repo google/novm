@@ -1,4 +1,4 @@
 # Basic package information.
 MAINTAINER ?= Adin Scannell <ascannell@google.com>
 SUMMARY ?= A high-performance, next-generation hypervisor written in Go.
-URL ?= http://code.google.com/p/novm/
+URL ?= https://github.com/google/novm
