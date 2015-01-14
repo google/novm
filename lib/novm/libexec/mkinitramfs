@@ -36,7 +36,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Create base directory structure.
-mkdir -p $WDIR/{bin,dev,lib/firmware,run,sbin,sys,proc}
+mkdir -p $WDIR/{bin,dev,lib/firmware,lib/modules/$KERNEL_VERSION,run,sbin,sys,proc}
 mkdir -p $WDIR/etc/{modprobe.d,udev/rules.d}
 touch $WDIR/etc/modprobe.d/modprobe.conf
 ln -s lib $WDIR/lib64
