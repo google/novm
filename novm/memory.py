@@ -18,6 +18,7 @@ import os
 import tempfile
 
 from . import device
+from . import utils
 
 class UserMemory(device.Driver):
 
@@ -32,6 +33,7 @@ class UserMemory(device.Driver):
         if fd is None:
             with tempfile.NamedTemporaryFile() as tf:
                 fd = os.dup(tf.fileno())
+                utils.clear_cloexec(fd)
 
         # No size given? Default to file size.
         if size is None:

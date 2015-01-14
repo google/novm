@@ -20,8 +20,13 @@ import os
 import json
 import tempfile
 import shutil
-import urllib2
 import time
+import sys
+
+if sys.version_info[0] == 3:
+    from urllib.request import urlopen
+else:
+    from urllib2 import urlopen
 
 from . import utils
 
@@ -93,7 +98,7 @@ class Nodb(object):
         for obj_id in self.list():
             obj_data = self.get(obj_id)
             obj_diff = [
-                k for (k, v) in kwargs.items()
+                k for (k, v) in list(kwargs.items())
                 if v != obj_data.get(k)
             ]
             if (not obj_diff and
@@ -108,11 +113,11 @@ class Nodb(object):
 
     def fetch(self, url, **kwargs):
         obj = {"url": url}
-        obj.update(kwargs.items())
+        obj.update(list(kwargs.items()))
 
         with tempfile.NamedTemporaryFile() as tf:
             # Download the file.
-            url_file = urllib2.urlopen(url)
+            url_file = urlopen(url)
             obj_id = utils.copy(tf, url_file, hash=True)
 
             # Does this already exist?

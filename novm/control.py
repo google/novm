@@ -46,6 +46,7 @@ class Control(object):
                     raise
 
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        utils.clear_cloexec(self._sock.fileno())
         if bind:
             if os.path.exists(path):
                 os.remove(path)
@@ -94,7 +95,7 @@ class Control(object):
 
     def run(self, command, env=None, cwd=None, terminal=False):
         if env is None:
-            env = ["%s=%s" % (k, v) for (k, v) in os.environ.items()]
+            env = ["%s=%s" % (k, v) for (k, v) in list(os.environ.items())]
         if cwd is None:
             cwd = "/"
 
@@ -162,7 +163,7 @@ class Control(object):
                         # Server is done.
                         raise IOError()
 
-                    elif isinstance(obj, str) or isinstance(obj, unicode):
+                    elif isinstance(obj, basestring):
                         data = binascii.a2b_base64(obj)
                         sys.stdout.write(data)
                         sys.stdout.flush()

@@ -18,9 +18,9 @@ import os
 import sys
 import ctypes
 import signal
-import thread
 import zipfile
 import hashlib
+import fcntl
 
 def cleanup(fcn=None, *args, **kwargs):
     # We setup a safe procedure here to ensure that the
@@ -91,35 +91,32 @@ def cleanup(fcn=None, *args, **kwargs):
         # hits Ctrl-C, which may be before our parent dies.
         signal.signal(signal.SIGINT, squash)
 
-        def interrupt(*args):
-            # Temporarily suppress SIGTERM. We'll enable it
-            # once we are ready to wait (and recheck races).
-            signal.signal(signal.SIGTERM, squash)
-            thread.exit()
-
         # Temporarily supress SIGTERM, we do this until
         # it's re-enabled in the main wait loop below.
         signal.signal(signal.SIGTERM, squash)
 
         # Notify that we are ready to go.
-        os.write(wpipe, 'o')
+        os.write(wpipe, b"o")
         os.close(wpipe)
 
-        while True:
-            try:
-                # Get ready to receive our SIGTERM.
-                # NOTE: When we receive the exception,
-                # it will automatically be suppressed.
-                signal.signal(signal.SIGTERM, interrupt)
+        try:
+            def interrupt(*args):
+                sys.exit(0)
 
+            # Get ready to receive our SIGTERM.
+            # NOTE: When we receive the exception,
+            # it will automatically be suppressed.
+            signal.signal(signal.SIGTERM, interrupt)
+
+            while True:
                 # Catch our race condition.
                 if os.getppid() != parent_pid:
                     break
 
                 # Wait for a signal.
                 signal.pause()
-            except (SystemExit, KeyboardInterrupt):
-                continue
+        except (SystemExit, KeyboardInterrupt):
+            pass
 
         try:
             fcn(*args, **kwargs)
@@ -181,10 +178,14 @@ def asbool(value):
         return False
     elif isinstance(value, bool):
         return value
-    elif isinstance(value, str) or isinstance(value, unicode):
+    elif isinstance(value, str):
         return value.lower() == "true" or value.lower() == "yes"
     else:
         return False
+
+def clear_cloexec(fd):
+    flags = fcntl.fcntl(fd, fcntl.F_GETFD)
+    fcntl.fcntl(fd, fcntl.F_SETFD, flags & (~fcntl.FD_CLOEXEC))
 
 def copy(dst, src, sparse=False, hash=False):
     if hash:

@@ -113,7 +113,7 @@ def tap_device(name):
                         TUN_F_TSO6 | TUN_F_TSO_ECN | TUN_F_UFO)
             offload = True
         except Exception as ex:
-            print "Failed to enable offloads:", ex
+            print("Failed to enable offloads:", ex)
             offload = False
     else:
         # Can't support offloads without vnet header.
@@ -192,10 +192,14 @@ class Nic(virtio.Driver):
         else:
             ip = None
 
+        fd = os.dup(tap.fileno())
+        utils.clear_cloexec(fd)
+
         return super(Nic, self).create(data={
                 "mac": mac,
                 "fd": os.dup(tap.fileno()),
                 "vnet": vnet,
+                "fd": fd,
                 "offload": offload,
                 "ip": ip
             }, **kwargs)

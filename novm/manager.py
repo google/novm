@@ -23,6 +23,7 @@ import tempfile
 import shutil
 import fcntl
 import pickle
+import six
 
 from . import utils
 from . import db
@@ -184,7 +185,7 @@ class NovmManager(object):
                     opt.split("=", 1)
                     for opt in nic.split(",")
                 ]))
-                for (index, nic) in zip(range(len(nics)), nics)
+                for (index, nic) in zip(list(range(len(nics))), nics)
             ])
 
             # Build our disks.
@@ -196,7 +197,7 @@ class NovmManager(object):
                     opt.split("=", 1)
                     for opt in odisk.split(",")
                 ]))
-                for (index, odisk) in zip(range(len(disks)), disks)
+                for (index, odisk) in zip(list(range(len(disks))), disks)
             ])
 
             # Add modules.
@@ -335,14 +336,16 @@ class NovmManager(object):
         try:
             args = ["novmm"]
 
-            # Provide our state.
-            with tempfile.NamedTemporaryFile() as state_file:
-                # Dump to a temporary file.
-                state_args, metadata = state(state_file)
-                state_file.seek(0, 0)
+            # Provide our state by dumping to a temporary file.
+            state_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            os.remove(state_file.name)
+            state_args, metadata = state(state_file)
+            state_file.seek(0, 0)
 
-                # Keep the descriptor.
-                statefd = os.dup(state_file.fileno())
+            # Keep the descriptor.
+            statefd = os.dup(state_file.fileno())
+            utils.clear_cloexec(statefd)
+            state_file.close()
 
             # Add our state.
             args.append("-statefd=%d" % statefd)
@@ -381,7 +384,7 @@ class NovmManager(object):
                 w.close()
             # Raise in the main thread.
             exc_info = sys.exc_info()
-            raise exc_info[0], exc_info[1], exc_info[2]
+            six.reraise(exc_info[0], exc_info[1], exc_info[2])
 
     def rpc(self, command, args, id=None, name=None):
         """ Execute a single control RPC. """
@@ -413,7 +416,7 @@ class NovmManager(object):
     def list(self, alive=False):
         rval = self._instances.show()
 
-        for (pid, value) in rval.items():
+        for (pid, value) in list(rval.items()):
             # Add information about liveliness.
             if self._is_alive(pid):
                 value["alive"] = True
@@ -424,7 +427,7 @@ class NovmManager(object):
             # Filter alive instances.
             rval = dict([
                 (k, v)
-                for (k, v) in rval.items()
+                for (k, v) in list(rval.items())
                 if v.get("alive")
             ])
 
@@ -467,7 +470,7 @@ class NovmManager(object):
 
     def kernels(self):
         kernels = self._kernels.show()
-        for (obj_id, data) in kernels.items():
+        for (obj_id, data) in list(kernels.items()):
             try:
                 # Add the release.
                 release = open(self._kernels.file(obj_id, "release")).read().strip()
@@ -509,8 +512,9 @@ class NovmManager(object):
                 stdout=vmlinux_file)
             vmlinux = vmlinux_file.name
         if setup is None:
-            setup_file = tempfile.NamedTemporaryFile()
+            setup_file = tempfile.NamedTemporaryFile(mode='wb')
             setup_file.write(open(bzimage, 'rb').read(4096))
+            setup_file.flush()
             setup = setup_file.name
         if sysmap is None:
             sysmap = "/boot/System.map-%s" % release
