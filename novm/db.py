@@ -52,6 +52,11 @@ class Nodb(object):
     def file(self, obj_id, *args):
         return os.path.join(self._root, obj_id, *args)
 
+    def dirs(self):
+        # List all dirs under _root.
+        entries = os.listdir(self._root)
+        return [x for x in entries if os.path.isdir(self.file(x))]
+
     def list(self):
         # We store all data in the given directory.
         # All entries are simply stored as json files.
@@ -59,7 +64,7 @@ class Nodb(object):
         return [x[0] for x in entries if x[1] == '.json']
 
     def show(self):
-        keys = self.list()
+        keys = self.dirs()
         result = {}
         for key in keys:
             try:
@@ -80,8 +85,12 @@ class Nodb(object):
 
     def get(self, obj_id=None, **kwargs):
         obj_id = self.find(obj_id=obj_id, **kwargs)
-        with open(self.file("%s.json" % obj_id), 'r') as inf:
-            return json.load(inf)
+        if (os.path.exists(self.file("%s.json" % obj_id))):
+            with open(self.file("%s.json" % obj_id), 'r') as inf:
+                return json.load(inf)
+        else:
+            with open(self.file(obj_id, "%s.json" % obj_id)) as inf:
+                return json.load(inf)
 
     def remove(self, obj_id=None, **kwargs):
         obj_id = self.find(obj_id=obj_id, **kwargs)
