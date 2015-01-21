@@ -14,6 +14,7 @@
 """
 Block device functions.
 """
+import os
 from . import virtio
 
 class Disk(virtio.Driver):
