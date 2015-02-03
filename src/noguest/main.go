@@ -48,19 +48,21 @@ func mount(fs string, location string) error {
 }
 
 func main() {
+	var console *os.File
 
 	// Parse flags.
 	flag.Parse()
 
 	if *server_fd == -1 {
 		// Open the console.
-		console, err := os.OpenFile(*control, os.O_RDWR, 0)
-		if err != nil {
+		if f, err := os.OpenFile(*control, os.O_RDWR, 0); err != nil {
 			log.Fatal("Problem opening console:", err)
+		} else {
+			console = f
 		}
 
 		// Make sure devpts is mounted.
-		err = mount("devpts", "/dev/pts")
+		err := mount("devpts", "/dev/pts")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -104,10 +106,6 @@ func main() {
 			log.Fatal(err)
 
 		case protocol.NoGuestCommandFakeInit:
-			// Use the console as our new server fd;
-			// This will just pass into our section below.
-			*server_fd = int(console.Fd())
-
 			// Since we don't have any init to setup basic
 			// things, like our hostname we do some of that here.
 			syscall.Sethostname([]byte("novm"))
@@ -116,16 +114,14 @@ func main() {
 			// What the heck is this?
 			log.Fatal(protocol.UnknownCommand)
 		}
+	} else {
+		// Open the defined fd.
+		console = os.NewFile(uintptr(*server_fd), "console")
 	}
 
-	if *server_fd != -1 {
-		// Small victory.
-		log.Printf("~~~ NOGUEST ~~~")
+	// Small victory.
+	log.Printf("~~~ NOGUEST ~~~")
 
-		// Open the console.
-		console := os.NewFile(uintptr(*server_fd), "console")
-
-		// Create our RPC server.
-		rpc.Run(console)
-	}
+	// Create our RPC server.
+	rpc.Run(console)
 }
