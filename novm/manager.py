@@ -94,6 +94,8 @@ class NovmManager(object):
             cmdline=None,
             vmmopt=None,
             nofork=False,
+            env=None,
+            cwd=None,
             terminal=False,
             command=None):
 
@@ -284,8 +286,10 @@ class NovmManager(object):
             state,
             command=command,
             nofork=nofork,
+            vmmopt=vmmopt,
             terminal=terminal,
-            vmmopt=vmmopt)
+            env=env,
+            cwd=cwd)
 
     def run_novmm(self,
             state,

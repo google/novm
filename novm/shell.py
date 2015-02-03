@@ -44,6 +44,8 @@ class NovmShell(object):
             cmdline=cli.StrOpt("Extra command line options?"),
             vmmopt=cli.ListOpt("Options to pass to novmm."),
             nofork=cli.BoolOpt("Don't fork into the background."),
+            env=cli.ListOpt("Specify an environment variable."),
+            cwd=cli.StrOpt("The process working directory."),
             terminal=cli.BoolOpt("Change the terminal mode."),
             *command):
 
@@ -114,6 +116,8 @@ class NovmShell(object):
             cmdline=cmdline,
             vmmopt=vmmopt,
             nofork=nofork,
+            env=env,
+            cwd=cwd,
             terminal=terminal,
             command=command)
 
