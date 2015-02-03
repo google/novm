@@ -65,7 +65,7 @@ class NovmShell(object):
 
             Available options are:
 
-            file=filename         Set the backing file (raw).
+            filename=disk         Set the backing file (raw).
             dev=vda               Set the device name.
             debug=true            Enable debugging.
 
