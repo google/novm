@@ -459,9 +459,9 @@ func (file *File) makeTree(
 	path string) error {
 
 	// Make all the super directories.
-	basedir, _ := filepath.Split(path)
+	basedir := filepath.Dir(path)
 
-	if basedir != path {
+	if basedir != "." {
 		parent, err := fs.lookup(basedir)
 		if err != nil {
 			return err
