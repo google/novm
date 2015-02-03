@@ -15,12 +15,17 @@
 Docker utilities.
 """
 import json
-import httplib
 import random
 import base64
 import tempfile
 import subprocess
 import os
+import sys
+
+if sys.version_info[0] == 3:
+    from http.client import HTTPSConnection
+else:
+    from httplib import HTTPSConnection
 
 class RegistryClient(object):
     """
@@ -136,7 +141,7 @@ class RegistryClient(object):
 
         # Open the requested URL.
         url = "https://%s/%s" % (host, url)
-        con = httplib.HTTPSConnection(host)
+        con = HTTPSConnection(host)
         con.request(method, url, body=body, headers=headers)
         resp = con.getresponse()
 
@@ -229,7 +234,7 @@ class RegistryClient(object):
         else:
             # Pick a random tag?
             tags = self.tags(repository)
-            (tag, image_id) = tags.items()[0]
+            (tag, image_id) = list(tags.items())[0]
 
         # Fetch our image.
         return self.pull_image(repository, image_id)

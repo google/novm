@@ -15,6 +15,7 @@
 Block device functions.
 """
 from . import virtio
+from . import utils
 
 class Disk(virtio.Driver):
 
@@ -35,10 +36,12 @@ class Disk(virtio.Driver):
 
         # Open the device.
         f = open(filename, 'r+b')
+        fd = os.dup(f.fileno())
+        utils.clear_cloexec(fd)
 
         return super(Disk, self).create(data={
                 "dev": dev,
-                "fd": os.dup(f.fileno()),
+                "fd": fd,
             }, **kwargs)
 
 virtio.Driver.register(Disk)

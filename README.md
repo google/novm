@@ -117,6 +117,8 @@ Requirements
 headers are not recent enough, you may see compilation errors related to
 `KVM_SIGNAL_MSI` or `KVM_CAP_SIGNAL_MSI`.
 
+You also need Python 2.6+ or Python 3+, plus the Python six module.
+
 Building
 ---------
 

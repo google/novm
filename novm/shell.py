@@ -147,7 +147,7 @@ class NovmShell(object):
         kwargs = dict(split_args)
 
         norm_kwargs = dict()
-        for (k, v) in kwargs.items():
+        for (k, v) in list(kwargs.items()):
             # Deserialize as JSON object.
             # This gives us strings, integers,
             # dictionaries, lists, etc. for free.
@@ -202,7 +202,7 @@ class NovmShell(object):
 
         if not full:
             # Prune devices, etc. unless requested.
-            for value in rval.values():
+            for value in list(rval.values()):
                 for k in ("kernel", "devices", "vcpus"):
                     if k in value:
                         del value[k]

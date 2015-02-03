@@ -19,20 +19,20 @@ import types
 
 def prettyprint(value, output):
 
-    if isinstance(value, types.NoneType):
+    if isinstance(value, type(None)):
         # Print nothing.
         pass
 
-    elif (isinstance(value, types.ListType) or
-        isinstance(value, types.DictType)):
+    elif (isinstance(value, list) or
+        isinstance(value, dict)):
 
         if len(value) == 0:
             # Empty list?
             return
 
         # Standardize lists and dictionaries.
-        if isinstance(value, types.ListType):
-            keys = range(len(value))
+        if isinstance(value, list):
+            keys = list(range(len(value)))
             values = value
         else:
             def try_int(k):
@@ -41,14 +41,14 @@ def prettyprint(value, output):
                 except ValueError:
                     return k
 
-            items = sorted([(try_int(k), v) for (k, v) in value.items()])
+            items = sorted([(try_int(k), v) for (k, v) in list(value.items())])
             keys = [x[0] for x in items]
             values = [x[1] for x in items]
 
         # Get the first instance.
         # Standardize as a dictionary.
         proto = values[0]
-        if not isinstance(proto, types.DictType):
+        if not isinstance(proto, dict):
             values = [{"value": x} for x in values]
 
         # Set a special element "id",
@@ -61,10 +61,10 @@ def prettyprint(value, output):
             v["id"] = k
 
         def format_entry(k, v):
-            if isinstance(v, types.FloatType) and k == "timestamp":
+            if isinstance(v, float) and k == "timestamp":
                 # Hack to print the time.
                 return time.ctime(v)
-            elif isinstance(v, types.ListType):
+            elif isinstance(v, list):
                 return ",".join([str(x) for x in v])
             elif v is not None:
                 return str(v)
@@ -74,13 +74,13 @@ def prettyprint(value, output):
         # Compute column widths.
         max_width = {}
         for entry in values:
-            for k, v in entry.items():
+            for k, v in list(entry.items()):
                 max_width[k] = max(
                     max_width.get(k, 0),
                     len(format_entry(k, v)),
                     len(k))
 
-        all_keys = max_width.keys()
+        all_keys = list(max_width.keys())
         all_keys.remove("id")
         all_keys.insert(0, "id")
 
@@ -95,7 +95,7 @@ def prettyprint(value, output):
 
         # Dump our output.
         output.write(sep_row() + "\n")
-        output.write(fmt_row(dict([(k, k) for k in max_width.keys()])) + "\n")
+        output.write(fmt_row(dict([(k, k) for k in list(max_width.keys())])) + "\n")
         output.write(sep_row() + "\n")
         for entry in values:
             output.write(fmt_row(entry) + "\n")
@@ -108,12 +108,12 @@ def prettyprint(value, output):
 
 def plainprint(value, output):
 
-    if isinstance(value, types.NoneType):
+    if isinstance(value, type(None)):
         # Print nothing.
         pass
 
-    elif (isinstance(value, types.ListType) or
-        isinstance(value, types.DictType)):
+    elif (isinstance(value, list) or
+        isinstance(value, dict)):
         # Print individual values.
         for subvalue in value:
             output.write("%s\n" % subvalue)

@@ -88,7 +88,7 @@ def main(args):
         if argspec.defaults is not None:
             default_args = argspec.args[len(argspec.args)-len(argspec.defaults):]
             real_args = argspec.args[1:len(argspec.args)-len(argspec.defaults)]
-            defaults = zip(default_args, argspec.defaults)
+            defaults = list(zip(default_args, argspec.defaults))
         else:
             default_args = []
             real_args = argspec.args[1:]
@@ -203,7 +203,7 @@ def main(args):
             result = fn(*built_args)
         else:
             result = fn(**vars(command_args))
-    except Exception, e:
+    except Exception as e:
         if top_args.debug:
             traceback.print_exc()
         else:
@@ -215,7 +215,7 @@ def main(args):
     # Print the result.
     # See decorator above, alwaysjson().
     if hasattr(fn, '_alwaysjson_') or top_args.json:
-        print json.dumps(result, indent=True)
+        print(json.dumps(result, indent=True))
     elif top_args.plain:
         prettyprint.plainprint(result, sys.stdout)
     else:
