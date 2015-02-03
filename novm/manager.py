@@ -383,8 +383,8 @@ class NovmManager(object):
         except:
             if not nofork:
                 # Write our exception.
-                w = os.fdopen(w_pipe, 'w')
-                pickle.dump(sys.exc_info()[:2], w)
+                w = os.fdopen(w_pipe, 'wb')
+                pickle.dump(sys.exc_info()[:2], w, 2)
                 w.close()
             # Raise in the main thread.
             exc_info = sys.exc_info()
