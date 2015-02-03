@@ -47,6 +47,7 @@ var cmdline = flag.String("cmdline", "", "linux command line")
 var system_map = flag.String("sysmap", "", "kernel symbol map")
 
 // Debug parameters.
+var logfile = flag.String("logfile", "", "log output file path")
 var step = flag.Bool("step", false, "step instructions")
 var trace = flag.Bool("trace", false, "trace kernel symbols on exit")
 var debug = flag.Bool("debug", false, "devices start debugging")
@@ -144,6 +145,15 @@ func main() {
 
 	// Parse all command line options.
 	flag.Parse()
+
+	if *logfile != "" {
+		f, err := os.Create(*logfile)
+		if err != nil {
+			utils.Die(err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+	}
 
 	// Are we doing a special restart?
 	// This will STOP the current process, and

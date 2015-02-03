@@ -147,7 +147,7 @@ class NovmManager(object):
         # (This is done as a callback since run() may
         # fork, etc. and we may need to do certain setup
         # routines within the novmm process proper.
-        def state(output):
+        def state(output, my_instance):
             devices = []
 
             # Always add basic devices.
@@ -230,7 +230,7 @@ class NovmManager(object):
                 index=1+len(nics)+len(disks),
                 pci=not(nopci),
                 tag="root",
-                tempdir=self._instances.file(str(os.getpid())),
+                tempdir=my_instance.file("writable"),
                 read=read,
                 write=write))
 
@@ -340,10 +340,14 @@ class NovmManager(object):
         try:
             args = ["novmm"]
 
+            # It's time to create my instance info dir.
+            my_instance = db.Nodb(
+                self._instances.file(str(os.getpid())))
+
             # Provide our state by dumping to a temporary file.
             state_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             os.remove(state_file.name)
-            state_args, metadata = state(state_file)
+            state_args, metadata = state(state_file, my_instance)
             state_file.seek(0, 0)
 
             # Keep the descriptor.
@@ -363,8 +367,12 @@ class NovmManager(object):
             # Add extra (debugging) arguments.
             args.extend(["-%s" % x for x in vmmopt])
 
+            # Add log file if not nofork.
+            if not nofork:
+                args.extend(["-logfile=%s" % my_instance.file("%s.log" % str(os.getpid()))])
+
             # Add our metadata to the registry.
-            self._instances.add(str(os.getpid()), metadata)
+            my_instance.add(str(os.getpid()), metadata)
             utils.cleanup(self._instances.remove, str(os.getpid()))
 
             # Close off final descriptors.
