@@ -115,8 +115,6 @@ class NovmManager(object):
             vmmopt = []
         if cmdline is None:
             cmdline = ""
-        else:
-            cmdline += " "
 
         # Choose the latest kernel by default.
         if kernel is None:
@@ -273,7 +271,7 @@ class NovmManager(object):
             # available until the devices are built,
             # but we can't build the devices until
             # we're in the novmm process (i.e. forked).
-            args.append("-cmdline=%s%s" % (" ".join([
+            args.append("-cmdline=%s %s" % (" ".join([
                 dev.cmdline()
                 for dev in devices
                 if dev.cmdline() is not None
