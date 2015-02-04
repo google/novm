@@ -31,6 +31,7 @@ import (
 	"log"
 	"math"
 	"novmm/platform"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -118,7 +119,8 @@ type VirtioChannel struct {
 	Consumed uint16 `json:"consumed"`
 
 	// Our outstanding buffers.
-	Outstanding VirtioBufferSet `json:"outstanding"`
+	Outstanding     VirtioBufferSet `json:"outstanding"`
+	outstandingLock sync.Mutex
 
 	// The queue size.
 	QueueSize Register `json:"queue-size"`
@@ -134,6 +136,7 @@ type VirtioChannel struct {
 	vring C.struct_vring
 }
 
+// This function should be called with outstandingLock hold
 func (vchannel *VirtioChannel) processOne(n uint16) error {
 
 	var buf *VirtioBuffer
@@ -258,6 +261,11 @@ func (vchannel *VirtioChannel) consumeOne() (bool, error) {
 }
 
 func (vchannel *VirtioChannel) consumeOutstanding() error {
+	vchannel.VirtioDevice.Acquire()
+	defer vchannel.VirtioDevice.Release()
+
+	vchannel.outstandingLock.Lock()
+	defer vchannel.outstandingLock.Unlock()
 
 	// Resubmit outstanding buffers.
 	for index, _ := range vchannel.Outstanding {
@@ -284,7 +292,9 @@ func (vchannel *VirtioChannel) ProcessIncoming() error {
 		atomic.StoreInt32(&vchannel.pending, 0)
 
 		for {
+			vchannel.outstandingLock.Lock()
 			found, err := vchannel.consumeOne()
+			vchannel.outstandingLock.Unlock()
 			if err != nil {
 				return err
 			}
@@ -305,6 +315,8 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
 	for buf := range vchannel.outgoing {
 		// The device is active.
 		vchannel.VirtioDevice.Acquire()
+
+		vchannel.outstandingLock.Lock()
 
 		// Put in the virtqueue.
 		vchannel.Debug(
@@ -337,6 +349,8 @@ func (vchannel *VirtioChannel) ProcessOutgoing() error {
 
 		// Remove from our outstanding list.
 		delete(vchannel.Outstanding, uint16(buf.index))
+
+		vchannel.outstandingLock.Unlock()
 
 		// We can release until the next buffer comes back.
 		vchannel.VirtioDevice.Release()
