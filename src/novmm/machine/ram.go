@@ -16,18 +16,24 @@ package machine
 
 import (
 	"math"
+	"sync"
 	"unsafe"
 )
 
 type Ram struct {
 	Data []byte `json:"data"`
+	lock sync.Mutex
 }
 
 func (ram *Ram) Size() int {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	return len(ram.Data)
 }
 
 func (ram *Ram) GrowTo(size int) {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	if size > len(ram.Data) {
 		missing := size - len(ram.Data)
 		new_bytes := make([]byte, missing, missing)
@@ -36,34 +42,50 @@ func (ram *Ram) GrowTo(size int) {
 }
 
 func (ram *Ram) Set8(offset int, data uint8) {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	ram.Data[offset] = byte(data)
 }
 
 func (ram *Ram) Get8(offset int) uint8 {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	return ram.Data[offset]
 }
 
 func (ram *Ram) Set16(offset int, data uint16) {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	*(*uint16)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get16(offset int) uint16 {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	return *(*uint16)(unsafe.Pointer(&ram.Data[offset]))
 }
 
 func (ram *Ram) Set32(offset int, data uint32) {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	*(*uint32)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get32(offset int) uint32 {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	return *(*uint32)(unsafe.Pointer(&ram.Data[offset]))
 }
 
 func (ram *Ram) Set64(offset int, data uint64) {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	*(*uint64)(unsafe.Pointer(&ram.Data[offset])) = data
 }
 
 func (ram *Ram) Get64(offset int) uint64 {
+	ram.lock.Lock()
+	defer ram.lock.Unlock()
 	return *(*uint64)(unsafe.Pointer(&ram.Data[offset]))
 }
 
@@ -119,4 +141,8 @@ func NewRam(size int) *Ram {
 	ram := new(Ram)
 	ram.Data = make([]byte, size, size)
 	return ram
+}
+
+func CreateRamFromBytes(bytes []byte) *Ram {
+	return &Ram{Data: bytes}
 }
