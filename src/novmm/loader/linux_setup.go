@@ -20,6 +20,7 @@ package loader
 #include <linux/const.h>
 #include <string.h>
 #include <asm/bootparam.h>
+#include <asm/e820.h>
 
 // E820 codes.
 const int E820Ram = E820_RAM;
