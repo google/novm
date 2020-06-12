@@ -20,6 +20,7 @@ package loader
 #include <linux/const.h>
 #include <string.h>
 #include <asm/bootparam.h>
+#include <asm/e820.h>
 
 // E820 codes.
 const int E820Ram = E820_RAM;
@@ -40,9 +41,9 @@ static inline void e820_set_region(
     __u64 size,
     __u8 type) {
 
-    boot->e820_map[index].addr = start;
-    boot->e820_map[index].size = size;
-    boot->e820_map[index].type = type;
+    boot->e820_table[index].addr = start;
+    boot->e820_table[index].size = size;
+    boot->e820_table[index].type = type;
 }
 static inline void set_header(
     struct boot_params* boot,
